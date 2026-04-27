@@ -4,8 +4,31 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>retalk</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1>retalk</h1>
+  <div id="app">
+    <div class="search-bar">
+      <input
+        type="text"
+        id="search-input"
+        placeholder="搜索会话..."
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <select id="view-mode">
+        <option value="timeline">时间线</option>
+        <option value="project">按项目</option>
+      </select>
+    </div>
+    <div id="session-list" class="session-list"></div>
+    <div class="status-bar">
+      <span>↑↓ 导航</span>
+      <span>Enter 恢复</span>
+      <span>Ctrl+C 复制命令</span>
+      <span>Esc 关闭</span>
+    </div>
+  </div>
+  <script src="main.js"></script>
 </body>
 </html>
