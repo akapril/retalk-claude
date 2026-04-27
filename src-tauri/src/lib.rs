@@ -1,5 +1,6 @@
 mod config;
 mod models;
+mod scanner;
 
 pub fn run() {
     tauri::Builder::default()
