@@ -2,6 +2,9 @@ mod config;
 mod indexer;
 mod models;
 mod scanner;
+mod searcher;
+mod terminal;
+mod updater;
 
 pub fn run() {
     tauri::Builder::default()
