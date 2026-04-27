@@ -9,6 +9,7 @@ use tantivy::{Order, TantivyDocument};
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SearchResult {
     pub session_id: String,
+    pub provider: String,
     pub project_path: String,
     pub project_name: String,
     pub first_prompt: String,
@@ -83,6 +84,7 @@ fn extract_results(
     docs: &[(f32, tantivy::DocAddress)],
 ) -> Vec<SearchResult> {
     let session_id_field = schema.get_field("session_id").unwrap();
+    let provider_field = schema.get_field("provider").unwrap();
     let project_path_field = schema.get_field("project_path").unwrap();
     let project_name_field = schema.get_field("project_name").unwrap();
     let first_prompt_field = schema.get_field("first_prompt").unwrap();
@@ -126,6 +128,7 @@ fn extract_results(
 
         results.push(SearchResult {
             session_id: get_text(session_id_field),
+            provider: get_text(provider_field),
             project_path: get_text(project_path_field),
             project_name: get_text(project_name_field),
             first_prompt: get_text(first_prompt_field),

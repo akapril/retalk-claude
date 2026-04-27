@@ -104,6 +104,41 @@ html, body {
   margin-bottom: 4px;
 }
 
+.session-item .project-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.provider-badge {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.provider-claude {
+  background: rgba(204, 120, 50, 0.3);
+  color: #e8a060;
+}
+
+.provider-codex {
+  background: rgba(16, 163, 127, 0.3);
+  color: #10a37f;
+}
+
+.provider-gemini {
+  background: rgba(66, 133, 244, 0.3);
+  color: #4285f4;
+}
+
+.provider-continue {
+  background: rgba(168, 85, 247, 0.3);
+  color: #a855f7;
+}
+
 .session-item .project-name {
   font-weight: 600;
   color: var(--text-highlight);

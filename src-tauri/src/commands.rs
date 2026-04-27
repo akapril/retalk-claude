@@ -43,16 +43,17 @@ pub fn list_sessions(
     searcher::list_all(&index, config.ui.max_results)
 }
 
-/// 在终端中恢复 Claude Code 会话
+/// 在终端中恢复 AI 编码工具会话
 #[tauri::command]
 pub fn resume_session(
     state: State<AppState>,
     session_id: String,
     project_path: String,
+    provider: String,
 ) -> Result<(), String> {
     let config = state.config.lock();
     let term = terminal::detect_terminal(&config.terminal.preferred);
-    terminal::resume_in_terminal(&term, &project_path, &session_id)
+    terminal::resume_in_terminal(&term, &provider, &project_path, &session_id)
 }
 
 /// 构建 resume 命令字符串（用于复制到剪贴板）
@@ -60,8 +61,9 @@ pub fn resume_session(
 pub fn copy_command(
     session_id: String,
     project_path: String,
+    provider: String,
 ) -> String {
-    terminal::build_resume_command(&project_path, &session_id)
+    terminal::build_resume_command(&provider, &project_path, &session_id)
 }
 
 /// 获取更新策略性能统计

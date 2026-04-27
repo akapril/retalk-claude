@@ -1,10 +1,11 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-/// Claude Code 会话
+/// AI 编码工具会话（支持多 provider）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Session {
     pub session_id: String,
+    pub provider: String, // "claude" / "codex" / "gemini" / "continue"
     pub project_path: String,
     pub project_name: String,
     pub first_prompt: String,

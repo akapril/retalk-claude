@@ -39,17 +39,24 @@ fn auto_detect() -> TerminalKind {
     TerminalKind::Cmd
 }
 
-/// 构建 claude --resume 命令字符串（用于展示或复制）
-pub fn build_resume_command(project_path: &str, session_id: &str) -> String {
-    format!(
-        "cd \"{}\" && claude --resume {}",
-        project_path, session_id
-    )
+/// 根据 provider 构建恢复命令字符串（用于展示或复制）
+pub fn build_resume_command(provider: &str, project_path: &str, session_id: &str) -> String {
+    let resume_cmd = match provider {
+        "claude" => format!("claude --resume {}", session_id),
+        "codex" => format!("codex --resume {}", session_id),
+        _ => String::new(),
+    };
+    if resume_cmd.is_empty() {
+        format!("cd \"{}\"", project_path)
+    } else {
+        format!("cd \"{}\" && {}", project_path, resume_cmd)
+    }
 }
 
-/// 在指定终端中恢复 Claude Code 会话
+/// 在指定终端中恢复 AI 编码工具会话
 pub fn resume_in_terminal(
     terminal: &TerminalKind,
+    provider: &str,
     project_path: &str,
     session_id: &str,
 ) -> Result<(), String> {
@@ -58,40 +65,47 @@ pub fn resume_in_terminal(
         .unwrap_or_default()
         .to_string_lossy();
 
+    // 根据 provider 生成工具恢复命令（不含 cd）
+    let tool_cmd = match provider {
+        "claude" => format!("claude --resume {}", session_id),
+        "codex" => format!("codex --resume {}", session_id),
+        _ => String::new(),
+    };
+
     let result = match terminal {
-        TerminalKind::WindowsTerminal => Command::new("wt.exe")
-            .args([
-                "new-tab",
-                "--title",
-                &format!("retalk: {}", project_name),
-                "-d",
-                project_path,
-                "cmd",
-                "/k",
-                "claude",
-                "--resume",
-                session_id,
-            ])
-            .spawn(),
-        TerminalKind::PowerShell => Command::new("pwsh.exe")
-            .args([
-                "-NoExit",
-                "-Command",
-                &format!(
-                    "Set-Location '{}'; claude --resume {}",
-                    project_path, session_id
-                ),
-            ])
-            .spawn(),
-        TerminalKind::Cmd => Command::new("cmd.exe")
-            .args([
-                "/k",
-                &format!(
-                    "cd /d \"{}\" && claude --resume {}",
-                    project_path, session_id
-                ),
-            ])
-            .spawn(),
+        TerminalKind::WindowsTerminal => {
+            // wt 使用 -d 设置工作目录，cmd /k 执行工具命令
+            let cmd_arg = if tool_cmd.is_empty() {
+                // 无恢复命令时只打开目录
+                String::new()
+            } else {
+                tool_cmd.clone()
+            };
+            Command::new("wt.exe")
+                .args([
+                    "new-tab",
+                    "--title",
+                    &format!("retalk: {}", project_name),
+                    "-d",
+                    project_path,
+                    "cmd",
+                    "/k",
+                    &cmd_arg,
+                ])
+                .spawn()
+        }
+        TerminalKind::PowerShell => {
+            let full_cmd = build_resume_command(provider, project_path, session_id);
+            Command::new("pwsh.exe")
+                .args(["-NoExit", "-Command", &full_cmd])
+                .spawn()
+        }
+        TerminalKind::Cmd => {
+            let full_cmd = build_resume_command(provider, project_path, session_id);
+            Command::new("cmd.exe")
+                .args(["/k", &full_cmd])
+                .spawn()
+        }
     };
 
     result

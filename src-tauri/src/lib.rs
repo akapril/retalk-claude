@@ -2,6 +2,7 @@ mod commands;
 mod config;
 mod indexer;
 mod models;
+mod providers;
 mod scanner;
 mod searcher;
 mod terminal;

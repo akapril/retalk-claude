@@ -78,9 +78,11 @@ function createSessionItem(session, index) {
   const promptText = session.last_prompt || session.first_prompt || "";
   const displayPrompt = highlightMatch(truncate(promptText, 80), currentQuery);
 
+  const providerBadge = `<span class="provider-badge provider-${session.provider}">${session.provider}</span>`;
+
   item.innerHTML = `
     <div class="header">
-      <span class="project-name">${escapeHtml(session.project_name)}</span>
+      <span class="project-info">${providerBadge}<span class="project-name">${escapeHtml(session.project_name)}</span></span>
       <span class="time">${escapeHtml(session.updated_at)}</span>
     </div>
     <div class="prompt">${displayPrompt}</div>
@@ -149,6 +151,7 @@ async function resumeSession(session) {
     await invoke("resume_session", {
       sessionId: session.session_id,
       projectPath: session.project_path,
+      provider: session.provider,
     });
     await appWindow.hide();
   } catch (e) {
@@ -161,6 +164,7 @@ async function copyCommand(session) {
     const cmd = await invoke("copy_command", {
       sessionId: session.session_id,
       projectPath: session.project_path,
+      provider: session.provider,
     });
     if (navigator.clipboard) {
       await navigator.clipboard.writeText(cmd);

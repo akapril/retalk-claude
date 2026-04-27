@@ -101,6 +101,7 @@ impl SessionIndex {
             );
 
         schema_builder.add_text_field("session_id", STRING | STORED);
+        schema_builder.add_text_field("provider", STRING | STORED);
         schema_builder.add_text_field("project_path", STRING | STORED);
         schema_builder.add_text_field("project_name", text_options.clone());
         schema_builder.add_text_field("first_prompt", text_options.clone());
@@ -111,8 +112,31 @@ impl SessionIndex {
 
         let schema = schema_builder.build();
 
-        let dir = MmapDirectory::open(&index_dir)?;
-        let index = Index::open_or_create(dir, schema.clone())?;
+        // 尝试打开已有索引，若 schema 不匹配则删除重建
+        let index = match MmapDirectory::open(&index_dir)
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+            .and_then(|dir| Index::open_or_create(dir, schema.clone()).map_err(|e| Box::new(e) as Box<dyn std::error::Error>))
+        {
+            Ok(idx) => {
+                // 检查 schema 是否包含新增的 provider 字段
+                if idx.schema().get_field("provider").is_err() {
+                    drop(idx);
+                    std::fs::remove_dir_all(&index_dir)?;
+                    std::fs::create_dir_all(&index_dir)?;
+                    let dir = MmapDirectory::open(&index_dir)?;
+                    Index::open_or_create(dir, schema.clone())?
+                } else {
+                    idx
+                }
+            }
+            Err(_) => {
+                // 索引损坏或不兼容，删除重建
+                let _ = std::fs::remove_dir_all(&index_dir);
+                std::fs::create_dir_all(&index_dir)?;
+                let dir = MmapDirectory::open(&index_dir)?;
+                Index::open_or_create(dir, schema.clone())?
+            }
+        };
 
         // 注册 jieba 分词器到索引
         index
@@ -158,6 +182,7 @@ impl SessionIndex {
         session: &Session,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let session_id = self.schema.get_field("session_id").unwrap();
+        let provider = self.schema.get_field("provider").unwrap();
         let project_path = self.schema.get_field("project_path").unwrap();
         let project_name = self.schema.get_field("project_name").unwrap();
         let first_prompt = self.schema.get_field("first_prompt").unwrap();
@@ -173,6 +198,7 @@ impl SessionIndex {
 
         writer.add_document(doc!(
             session_id => session.session_id.as_str(),
+            provider => session.provider.as_str(),
             project_path => session.project_path.as_str(),
             project_name => session.project_name.as_str(),
             first_prompt => session.first_prompt.as_str(),
