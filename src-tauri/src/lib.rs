@@ -1,4 +1,5 @@
 mod config;
+mod indexer;
 mod models;
 mod scanner;
 
