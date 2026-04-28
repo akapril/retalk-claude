@@ -17,7 +17,7 @@ let statsOpen = false;     // Feature 5: 统计面板状态
 let contextSession = null; // Feature 4: 右键菜单关联的会话
 let compareOpen = false;   // Feature 5(会话对比): 对比视图状态
 let ecoOpen = false;       // 生态面板状态
-let ecoTab = "skills";     // 生态面板当前标签: "skills" | "mcp" | "configs"
+let ecoTab = "plugins";    // 生态面板当前标签: "plugins" | "skills" | "mcp" | "configs"
 let multiSelectMode = false; // Feature 6(批量操作): 多选模式
 let multiSelected = new Set(); // Feature 6: 已选会话 ID 集合
 let providerStatus = [];   // Feature 1(空状态引导): provider 可用状态
@@ -309,15 +309,39 @@ function renderEcosystem(data) {
 
   const tabsHtml = `
     <div class="eco-tabs">
+      <button class="eco-tab ${ecoTab === 'plugins' ? 'active' : ''}" data-tab="plugins">插件 (${data.plugins.length})</button>
       <button class="eco-tab ${ecoTab === 'skills' ? 'active' : ''}" data-tab="skills">Skills (${data.skills.length})</button>
-      <button class="eco-tab ${ecoTab === 'mcp' ? 'active' : ''}" data-tab="mcp">MCP 服务器 (${data.mcp_servers.length})</button>
-      <button class="eco-tab ${ecoTab === 'configs' ? 'active' : ''}" data-tab="configs">配置对比 (${data.configs.length})</button>
+      <button class="eco-tab ${ecoTab === 'mcp' ? 'active' : ''}" data-tab="mcp">MCP (${data.mcp_servers.length})</button>
+      <button class="eco-tab ${ecoTab === 'configs' ? 'active' : ''}" data-tab="configs">配置 (${data.configs.length})</button>
     </div>
   `;
 
   let contentHtml = "";
 
-  if (ecoTab === "skills") {
+  if (ecoTab === "plugins") {
+    if (data.plugins.length === 0) {
+      contentHtml = '<div class="eco-empty">未检测到已安装插件</div>';
+    } else {
+      data.plugins.forEach(p => {
+        const badges = [];
+        if (p.has_skills) badges.push(`<span class="eco-badge eco-badge-skill">${p.skill_count} skills</span>`);
+        if (p.has_mcp) badges.push('<span class="eco-badge eco-badge-mcp">MCP</span>');
+        contentHtml += `
+          <div class="eco-plugin-card">
+            <div class="eco-plugin-header">
+              <span class="eco-plugin-name">${escapeHtml(p.name)}</span>
+              <span class="eco-plugin-version">v${escapeHtml(p.version)}</span>
+            </div>
+            <div class="eco-plugin-desc">${escapeHtml(p.description)}</div>
+            <div class="eco-plugin-meta">
+              <span>${escapeHtml(p.marketplace)}</span>
+              <span>${escapeHtml(p.installed_at)}</span>
+              ${badges.join("")}
+            </div>
+          </div>`;
+      });
+    }
+  } else if (ecoTab === "skills") {
     if (data.skills.length === 0) {
       contentHtml = '<div class="eco-empty">未检测到 Skills</div>';
     } else {

@@ -7,6 +7,21 @@ pub struct EcosystemData {
     pub skills: Vec<SkillInfo>,
     pub mcp_servers: Vec<McpServerInfo>,
     pub configs: Vec<ToolConfig>,
+    pub plugins: Vec<PluginInfo>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PluginInfo {
+    pub name: String,
+    pub marketplace: String,
+    pub version: String,
+    pub description: String,
+    pub scope: String,
+    pub installed_at: String,
+    pub install_path: String,
+    pub has_skills: bool,
+    pub has_mcp: bool,
+    pub skill_count: u32,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -60,10 +75,14 @@ pub fn scan_ecosystem() -> EcosystemData {
     // Kilo Code
     scan_kilo_mcp(&mut mcp_servers);
 
+    // Claude Code 插件
+    let plugins = scan_claude_plugins();
+
     EcosystemData {
         skills,
         mcp_servers,
         configs,
+        plugins,
     }
 }
 
@@ -523,4 +542,102 @@ pub fn toggle_claude_mcp(server_name: &str, enabled: bool) -> Result<(), String>
     let output = serde_json::to_string_pretty(&data).map_err(|e| e.to_string())?;
     fs::write(&path, output).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+// ============================================================
+// Claude Code 插件管理
+// ============================================================
+
+/// 扫描已安装的 Claude Code 插件
+fn scan_claude_plugins() -> Vec<PluginInfo> {
+    let home = dirs::home_dir().unwrap_or_default();
+    let plugins_file = home.join(".claude").join("plugins").join("installed_plugins.json");
+
+    let content = match fs::read_to_string(&plugins_file) {
+        Ok(c) => c,
+        Err(_) => return Vec::new(),
+    };
+
+    let data: serde_json::Value = match serde_json::from_str(&content) {
+        Ok(d) => d,
+        Err(_) => return Vec::new(),
+    };
+
+    let mut plugins = Vec::new();
+
+    if let Some(plugin_map) = data.get("plugins").and_then(|v| v.as_object()) {
+        for (key, installs) in plugin_map {
+            // key 格式: "plugin-name@marketplace"
+            let parts: Vec<&str> = key.splitn(2, '@').collect();
+            let plugin_name = parts.first().unwrap_or(&"").to_string();
+            let marketplace = parts.get(1).unwrap_or(&"").to_string();
+
+            if let Some(install_arr) = installs.as_array() {
+                for inst in install_arr {
+                    let version = inst.get("version").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
+                    let scope = inst.get("scope").and_then(|v| v.as_str()).unwrap_or("user").to_string();
+                    let installed_at = inst.get("installedAt").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                    let install_path = inst.get("installPath").and_then(|v| v.as_str()).unwrap_or("").to_string();
+
+                    // 读取 plugin.json 获取描述
+                    let description = if !install_path.is_empty() {
+                        let plugin_json = std::path::Path::new(&install_path).join(".claude-plugin").join("plugin.json");
+                        fs::read_to_string(&plugin_json)
+                            .ok()
+                            .and_then(|c| serde_json::from_str::<serde_json::Value>(&c).ok())
+                            .and_then(|d| d.get("description").and_then(|v| v.as_str()).map(|s| s.to_string()))
+                            .unwrap_or_default()
+                    } else {
+                        String::new()
+                    };
+
+                    // 检查是否有 skills 和 mcp
+                    let has_skills = if !install_path.is_empty() {
+                        std::path::Path::new(&install_path).join("skills").exists()
+                            || std::path::Path::new(&install_path).join(".claude-plugin").join("skills").exists()
+                    } else {
+                        false
+                    };
+
+                    let has_mcp = if !install_path.is_empty() {
+                        std::path::Path::new(&install_path).join(".mcp.json").exists()
+                            || std::path::Path::new(&install_path).join(".claude-plugin").join(".mcp.json").exists()
+                    } else {
+                        false
+                    };
+
+                    // 统计 skill 数量
+                    let skill_count = if has_skills {
+                        let skills_dir = std::path::Path::new(&install_path).join("skills");
+                        if skills_dir.exists() {
+                            fs::read_dir(&skills_dir)
+                                .map(|entries| entries.flatten().filter(|e| e.path().is_dir()).count() as u32)
+                                .unwrap_or(0)
+                        } else {
+                            0
+                        }
+                    } else {
+                        0
+                    };
+
+                    plugins.push(PluginInfo {
+                        name: plugin_name.clone(),
+                        marketplace: marketplace.clone(),
+                        version,
+                        description,
+                        scope,
+                        installed_at: installed_at.chars().take(10).collect(), // 只取日期部分
+                        install_path,
+                        has_skills,
+                        has_mcp,
+                        skill_count,
+                    });
+                }
+            }
+        }
+    }
+
+    // 按安装时间降序
+    plugins.sort_by(|a, b| b.installed_at.cmp(&a.installed_at));
+    plugins
 }
