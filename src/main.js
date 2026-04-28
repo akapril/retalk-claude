@@ -69,40 +69,24 @@ document.addEventListener("click", () => {
   document.querySelectorAll(".icon-dropdown.open").forEach((d) => d.classList.remove("open"));
 });
 
-// 图标映射：值 -> 按钮显示的图标
-const providerIcons = { all: "\u{1F310}", claude: "\u25C6", codex: "\u25CF", gemini: "\u2605", continue: "\u25B6" };
-const viewIcons = { project: "\u{1F4C1}", timeline: "\u{1F554}" };
-const sortIcons = { time: "\u{1F554}", name: "\u{24B6}" };
-
-function updateBtnIcon(container, iconMap, value) {
-  const btn = container.querySelector(".icon-btn");
-  if (iconMap[value]) btn.textContent = iconMap[value];
-}
-
 setupDropdown(ddProvider, providerFilter, (val) => {
   providerFilter = val;
   localStorage.setItem("retalk_providerFilter", providerFilter);
-  updateBtnIcon(ddProvider, providerIcons, val);
   selectedIndex = 0;
   render();
 });
-updateBtnIcon(ddProvider, providerIcons, providerFilter);
 
 setupDropdown(ddView, viewMode, (val) => {
   viewMode = val;
   localStorage.setItem("retalk_viewMode", viewMode);
-  updateBtnIcon(ddView, viewIcons, val);
   render();
 });
-updateBtnIcon(ddView, viewIcons, viewMode);
 
 setupDropdown(ddSort, sortMode, (val) => {
   sortMode = val;
   localStorage.setItem("retalk_sortMode", sortMode);
-  updateBtnIcon(ddSort, sortIcons, val);
   render();
 });
-updateBtnIcon(ddSort, sortIcons, sortMode);
 
 async function init() {
   // 加载收藏和标签

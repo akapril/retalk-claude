@@ -234,15 +234,20 @@ html, body {
 
 /* 工具栏图标按钮 */
 .icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
   border: none;
   color: var(--text-dim);
-  font-size: 15px;
   cursor: pointer;
-  padding: 4px 6px;
+  padding: 5px;
   border-radius: 6px;
-  line-height: 1;
   transition: color 0.15s, background 0.15s;
+}
+
+.icon-btn svg {
+  display: block;
 }
 
 .icon-btn:hover {
