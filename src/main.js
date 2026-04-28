@@ -389,7 +389,7 @@ function renderEcosystem(data) {
             <div class="eco-item">
               <span class="eco-item-name">${escapeHtml(s.name)}</span>
               <span class="eco-item-desc" title="${escapeHtml(cmdStr)}">${escapeHtml(truncate(cmdStr, 40))}</span>
-              <button class="eco-toggle ${toggleClass}" data-tool="${escapeHtml(s.tool)}" data-server="${escapeHtml(s.name)}" data-enabled="${s.enabled}" title="${s.enabled ? '已启用' : '已禁用'}"></button>
+              <button class="eco-toggle ${toggleClass}" data-source="${escapeHtml(s.source)}" data-server="${escapeHtml(s.name)}" data-enabled="${s.enabled}" title="${s.enabled ? '已启用' : '已禁用'}"></button>
             </div>`;
         });
         contentHtml += `</div>`;
@@ -433,11 +433,11 @@ function renderEcosystem(data) {
   // MCP 服务器启禁切换事件
   ecoPanel.querySelectorAll(".eco-toggle").forEach(btn => {
     btn.addEventListener("click", async () => {
-      const tool = btn.dataset.tool;
+      const source = btn.dataset.source;
       const server = btn.dataset.server;
       const currentEnabled = btn.dataset.enabled === "true";
       try {
-        await invoke("toggle_mcp_server", { tool, serverName: server, enabled: !currentEnabled });
+        await invoke("toggle_mcp_server", { serverName: server, source, enabled: !currentEnabled });
         showToast(`${server} 已${currentEnabled ? '禁用' : '启用'}`);
         const freshData = await invoke("get_ecosystem");
         renderEcosystem(freshData);

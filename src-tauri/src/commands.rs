@@ -654,11 +654,8 @@ pub fn get_ecosystem() -> crate::ecosystem::EcosystemData {
 }
 
 #[tauri::command]
-pub fn toggle_mcp_server(tool: String, server_name: String, enabled: bool) -> Result<(), String> {
-    match tool.as_str() {
-        "claude" => crate::ecosystem::toggle_claude_mcp(&server_name, enabled),
-        _ => Err("该工具暂不支持 MCP 服务器切换".to_string()),
-    }
+pub fn toggle_mcp_server(server_name: String, source: String, enabled: bool) -> Result<(), String> {
+    crate::ecosystem::toggle_mcp_in_file(&source, &server_name, enabled)
 }
 
 // ============================================================

@@ -236,12 +236,79 @@ fn extract_skill_description(path: &PathBuf) -> String {
 fn scan_claude_mcp(servers: &mut Vec<McpServerInfo>) {
     let home = dirs::home_dir().unwrap_or_default();
 
-    // 全局配置: ~/.claude/settings.json
+    // 1. 全局配置: ~/.claude/settings.json
     let settings_path = home.join(".claude").join("settings.json");
     if let Some(data) = read_json_file(&settings_path) {
         if let Some(mcp) = data.get("mcpServers").and_then(|v| v.as_object()) {
             for (name, config) in mcp {
                 servers.push(parse_mcp_entry("claude", name, config, &settings_path));
+            }
+        }
+    }
+
+    // 2. 插件内的 .mcp.json: ~/.claude/plugins/cache/<mp>/<plugin>/<version>/.mcp.json
+    let plugins_cache = home.join(".claude").join("plugins").join("cache");
+    if plugins_cache.exists() {
+        scan_plugin_mcp_files(&plugins_cache, servers);
+    }
+
+    // 3. 独立插件: ~/.claude/plugins/<plugin>/.mcp.json
+    let plugins_dir = home.join(".claude").join("plugins");
+    if plugins_dir.exists() {
+        if let Ok(entries) = fs::read_dir(&plugins_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if !path.is_dir() { continue; }
+                let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                if name == "cache" || name == "marketplaces" || name == "data" { continue; }
+                let mcp_file = path.join(".mcp.json");
+                if mcp_file.exists() {
+                    if let Some(data) = read_json_file(&mcp_file) {
+                        if let Some(mcp) = data.get("mcpServers").and_then(|v| v.as_object()) {
+                            for (sname, config) in mcp {
+                                servers.push(parse_mcp_entry("claude", sname, config, &mcp_file));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// 扫描 plugins/cache 下所有插件的 .mcp.json
+fn scan_plugin_mcp_files(cache_dir: &PathBuf, servers: &mut Vec<McpServerInfo>) {
+    let marketplaces = match fs::read_dir(cache_dir) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+    for mp_entry in marketplaces.flatten() {
+        let mp_path = mp_entry.path();
+        if !mp_path.is_dir() { continue; }
+        let plugins = match fs::read_dir(&mp_path) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        for plugin_entry in plugins.flatten() {
+            let plugin_path = plugin_entry.path();
+            if !plugin_path.is_dir() { continue; }
+            // 找最新版本
+            let mut versions: Vec<_> = fs::read_dir(&plugin_path)
+                .into_iter().flatten().flatten()
+                .filter(|e| e.path().is_dir())
+                .collect();
+            versions.sort_by(|a, b| b.file_name().cmp(&a.file_name()));
+            if let Some(version_entry) = versions.first() {
+                let mcp_file = version_entry.path().join(".mcp.json");
+                if mcp_file.exists() {
+                    if let Some(data) = read_json_file(&mcp_file) {
+                        if let Some(mcp) = data.get("mcpServers").and_then(|v| v.as_object()) {
+                            for (name, config) in mcp {
+                                servers.push(parse_mcp_entry("claude", name, config, &mcp_file));
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -522,28 +589,26 @@ fn parse_mcp_entry(
 // === MCP 服务器启禁切换 ===
 
 /// 切换 Claude Code settings.json 中 MCP 服务器的启用状态
-pub fn toggle_claude_mcp(server_name: &str, enabled: bool) -> Result<(), String> {
-    let home = dirs::home_dir().ok_or("无法获取 home 目录")?;
-    let path = home.join(".claude").join("settings.json");
-    let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    let mut data: serde_json::Value = serde_json::from_str(&content).map_err(|e| e.to_string())?;
+/// 切换 MCP 服务器启禁状态（通过修改其所在的配置文件）
+pub fn toggle_mcp_in_file(source_path: &str, server_name: &str, enabled: bool) -> Result<(), String> {
+    let path = std::path::Path::new(source_path);
+    let content = fs::read_to_string(path).map_err(|e| format!("读取失败: {}", e))?;
+    let mut data: serde_json::Value = serde_json::from_str(&content).map_err(|e| format!("解析失败: {}", e))?;
 
-    if let Some(servers) = data
-        .get_mut("mcpServers")
-        .and_then(|v| v.as_object_mut())
-    {
+    if let Some(servers) = data.get_mut("mcpServers").and_then(|v| v.as_object_mut()) {
         if let Some(server) = servers.get_mut(server_name) {
             if let Some(obj) = server.as_object_mut() {
-                obj.insert(
-                    "disabled".to_string(),
-                    serde_json::Value::Bool(!enabled),
-                );
+                if enabled {
+                    obj.remove("disabled");
+                } else {
+                    obj.insert("disabled".to_string(), serde_json::Value::Bool(true));
+                }
             }
         }
     }
 
-    let output = serde_json::to_string_pretty(&data).map_err(|e| e.to_string())?;
-    fs::write(&path, output).map_err(|e| e.to_string())?;
+    let output = serde_json::to_string_pretty(&data).map_err(|e| format!("序列化失败: {}", e))?;
+    fs::write(path, output).map_err(|e| format!("写入失败: {}", e))?;
     Ok(())
 }
 
