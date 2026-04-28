@@ -36,32 +36,41 @@ pub fn run() {
     // 加载配置
     let app_config = config::load_config();
 
-    // 初始化索引
+    // 初始化索引（空的，后台填充）
     let index = SessionIndex::new().expect("Tantivy 索引初始化失败");
-
-    // 全量扫描并建立索引
-    let sessions = scanner::scan_all_sessions();
-    let _ = index.rebuild(&sessions);
-
     let index = Arc::new(Mutex::new(index));
     let updater_instance = Arc::new(updater::Updater::new());
-
-    // 启动后台更新策略
-    updater_instance.start_watcher(Arc::clone(&index), &app_config);
-    updater_instance.start_poll(Arc::clone(&index), &app_config);
 
     // 加载收藏和标签
     let favorites = commands::load_favorites();
     let tags = commands::load_tags();
 
     let state = AppState {
-        index,
-        updater: updater_instance,
-        config: Arc::new(Mutex::new(app_config)),
-        sessions: Arc::new(Mutex::new(sessions)),
+        index: Arc::clone(&index),
+        updater: Arc::clone(&updater_instance),
+        config: Arc::new(Mutex::new(app_config.clone())),
+        sessions: Arc::new(Mutex::new(Vec::new())),
         favorites: Arc::new(Mutex::new(favorites)),
         tags: Arc::new(Mutex::new(tags)),
     };
+
+    // 后台线程：扫描数据 + 建立索引 + 启动更新策略（不阻塞 UI）
+    let bg_index = Arc::clone(&index);
+    let bg_updater = Arc::clone(&updater_instance);
+    let bg_sessions = Arc::clone(&state.sessions);
+    let bg_config = app_config.clone();
+    std::thread::spawn(move || {
+        eprintln!("[retalk] 后台扫描开始...");
+        let sessions = scanner::scan_all_sessions();
+        eprintln!("[retalk] 扫描完成，共 {} 条会话，开始建索引...", sessions.len());
+        let _ = bg_index.lock().rebuild(&sessions);
+        *bg_sessions.lock() = sessions;
+        eprintln!("[retalk] 索引建立完成");
+
+        // 启动后台更新策略
+        bg_updater.start_watcher(Arc::clone(&bg_index), &bg_config);
+        bg_updater.start_poll(Arc::clone(&bg_index), &bg_config);
+    });
 
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())

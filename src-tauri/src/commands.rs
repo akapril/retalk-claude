@@ -23,15 +23,17 @@ pub struct AppState {
     pub tags: Arc<Mutex<TagsMap>>,
 }
 
-/// 全文搜索会话
+/// 全文搜索会话，支持按 provider 过滤
 #[tauri::command]
 pub fn search(
     state: State<AppState>,
     query: String,
+    provider_filter: Option<String>,
 ) -> Vec<SearchResult> {
     let index = state.index.lock();
     let max = state.config.lock().ui.max_results;
-    searcher::search(&index, &query, max)
+    let filter = provider_filter.as_deref().filter(|p| *p != "all");
+    searcher::search(&index, &query, max, filter)
 }
 
 /// 列出会话（按更新时间降序），支持按 provider 过滤，并按需刷新索引

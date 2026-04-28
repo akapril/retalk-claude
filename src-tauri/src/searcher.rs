@@ -20,11 +20,12 @@ pub struct SearchResult {
     pub score: f32,
 }
 
-/// 全文搜索
+/// 全文搜索，可按 provider 过滤
 pub fn search(
     index: &SessionIndex,
     query_str: &str,
     max_results: usize,
+    provider_filter: Option<&str>,
 ) -> Vec<SearchResult> {
     let searcher = index.reader().searcher();
     let schema = index.schema();
@@ -39,12 +40,26 @@ pub fn search(
         vec![project_name, first_prompt, last_prompt, content],
     );
 
-    let query = match query_parser.parse_query(query_str) {
+    let text_query = match query_parser.parse_query(query_str) {
         Ok(q) => q,
         Err(_) => return Vec::new(),
     };
 
-    let top_docs = match searcher.search(&query, &TopDocs::with_limit(max_results)) {
+    // 如果指定了 provider，用 BooleanQuery 组合文本查询和 provider 过滤
+    let final_query: Box<dyn tantivy::query::Query> = match provider_filter {
+        Some(provider) => {
+            let provider_field = schema.get_field("provider").unwrap();
+            let term = tantivy::Term::from_field_text(provider_field, provider);
+            let provider_query = tantivy::query::TermQuery::new(term, tantivy::schema::IndexRecordOption::Basic);
+            Box::new(tantivy::query::BooleanQuery::new(vec![
+                (tantivy::query::Occur::Must, text_query),
+                (tantivy::query::Occur::Must, Box::new(provider_query)),
+            ]))
+        }
+        None => text_query,
+    };
+
+    let top_docs = match searcher.search(&*final_query, &TopDocs::with_limit(max_results)) {
         Ok(docs) => docs,
         Err(_) => return Vec::new(),
     };

@@ -271,7 +271,7 @@ function renderStats() {
 async function loadSessions() {
   try {
     if (currentQuery.trim()) {
-      sessions = await invoke("search", { query: currentQuery });
+      sessions = await invoke("search", { query: currentQuery, providerFilter });
     } else {
       sessions = await invoke("list_sessions", { providerFilter });
     }
