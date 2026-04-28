@@ -31,9 +31,24 @@
         <option value="time">按时间</option>
         <option value="name">按名称</option>
       </select>
+      <button id="stats-btn" class="icon-btn" title="统计">&#128202;</button>
       <button id="settings-btn" class="icon-btn" title="设置">&#9881;</button>
     </div>
     <div id="session-list" class="session-list"></div>
+    <div id="preview-panel" class="preview-panel" style="display:none">
+      <div class="preview-title">最近消息</div>
+      <div id="preview-messages" class="preview-messages"></div>
+    </div>
+    <!-- 右键菜单 -->
+    <div id="context-menu" class="context-menu" style="display:none">
+      <div class="ctx-item" data-action="resume">&#9654; 恢复会话</div>
+      <div class="ctx-item" data-action="vscode">&#128196; 在 VS Code 中打开</div>
+      <div class="ctx-item" data-action="explorer">&#128193; 在文件管理器中打开</div>
+      <div class="ctx-item" data-action="copy-path">&#128203; 复制项目路径</div>
+      <div class="ctx-item" data-action="copy-cmd">&#128203; 复制恢复命令</div>
+    </div>
+    <!-- 统计视图 -->
+    <div id="stats-panel" class="stats-panel" style="display:none"></div>
     <div id="settings-panel" class="settings-panel" style="display:none">
       <div class="settings-section">
         <div class="settings-title">快捷键</div>

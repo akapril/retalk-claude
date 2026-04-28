@@ -8,6 +8,13 @@ let viewMode = "project";
 let sortMode = "time"; // "time" | "name"
 let providerFilter = "all"; // "all" | "claude" | "codex" | "gemini" | "continue"
 
+// 新功能状态
+let favorites = [];       // Feature 3: 收藏的 session_id 列表
+let allTags = {};          // Feature 6: session_id -> [tag1, tag2]
+let gitInfoCache = {};     // Feature 2: project_path -> { branch, dirty_count }
+let statsOpen = false;     // Feature 5: 统计面板状态
+let contextSession = null; // Feature 4: 右键菜单关联的会话
+
 const searchInput = document.getElementById("search-input");
 const sessionList = document.getElementById("session-list");
 const viewModeSelect = document.getElementById("view-mode");
@@ -15,11 +22,24 @@ const sortModeSelect = document.getElementById("sort-mode");
 const providerFilterSelect = document.getElementById("provider-filter");
 const settingsBtn = document.getElementById("settings-btn");
 const settingsPanel = document.getElementById("settings-panel");
+const previewPanel = document.getElementById("preview-panel");
+const previewMessages = document.getElementById("preview-messages");
+const contextMenu = document.getElementById("context-menu");
+const statsBtn = document.getElementById("stats-btn");
+const statsPanel = document.getElementById("stats-panel");
 const appWindow = getCurrentWindow();
 
 let settingsOpen = false;
 
 async function init() {
+  // 加载收藏和标签
+  try {
+    favorites = await invoke("get_favorites");
+  } catch (_) { /* 忽略 */ }
+  try {
+    allTags = await invoke("get_all_tags");
+  } catch (_) { /* 忽略 */ }
+
   await loadSessions();
   searchInput.focus();
 }
@@ -36,9 +56,11 @@ settingsBtn.addEventListener("click", async () => {
 async function openSettings() {
   settingsOpen = true;
   sessionList.style.display = "none";
+  previewPanel.style.display = "none";
   settingsPanel.style.display = "";
+  statsPanel.style.display = "none";
+  statsOpen = false;
 
-  // 加载当前配置
   try {
     const config = await invoke("get_config");
     document.getElementById("cfg-hotkey").value = config.general.hotkey;
@@ -85,12 +107,110 @@ document.getElementById("settings-save").addEventListener("click", async () => {
   try {
     await invoke("save_config", { newConfig });
     closeSettings();
-    await loadSessions(); // 刷新列表（max_results 可能变了）
+    await loadSessions();
   } catch (e) {
     console.error("保存配置失败:", e);
   }
 });
 
+// === Feature 5: 统计面板 ===
+statsBtn.addEventListener("click", () => {
+  if (statsOpen) {
+    closeStats();
+  } else {
+    openStats();
+  }
+});
+
+function openStats() {
+  statsOpen = true;
+  settingsOpen = false;
+  sessionList.style.display = "none";
+  previewPanel.style.display = "none";
+  settingsPanel.style.display = "none";
+  statsPanel.style.display = "";
+  renderStats();
+}
+
+function closeStats() {
+  statsOpen = false;
+  statsPanel.style.display = "none";
+  sessionList.style.display = "";
+  searchInput.focus();
+}
+
+function renderStats() {
+  // 按 provider 统计
+  const byProvider = {};
+  const byProject = {};
+  const byMonth = {};
+
+  sessions.forEach((s) => {
+    // provider 统计
+    byProvider[s.provider] = (byProvider[s.provider] || 0) + 1;
+    // 项目统计
+    const pName = s.project_name || "未知项目";
+    byProject[pName] = (byProject[pName] || 0) + 1;
+    // 月份统计（updated_at 格式: "MM-DD HH:MM"）
+    const month = s.updated_at ? s.updated_at.substring(0, 2) : "??";
+    byMonth[month] = (byMonth[month] || 0) + 1;
+  });
+
+  // 前 5 活跃项目
+  const topProjects = Object.entries(byProject)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
+
+  const maxProjectCount = topProjects.length > 0 ? topProjects[0][1] : 1;
+
+  // 月份排序
+  const months = Object.entries(byMonth).sort((a, b) => a[0].localeCompare(b[0]));
+  const maxMonthCount = months.length > 0 ? Math.max(...months.map((m) => m[1])) : 1;
+
+  let html = `
+    <div class="stats-section">
+      <div class="stats-section-title">总览</div>
+      <div class="stats-row"><span class="label">总会话数</span><span class="value">${sessions.length}</span></div>
+      ${Object.entries(byProvider)
+        .map(([p, c]) => `<div class="stats-row"><span class="label">${escapeHtml(p)}</span><span class="value">${c}</span></div>`)
+        .join("")}
+    </div>
+    <div class="stats-section">
+      <div class="stats-section-title">最活跃项目 (Top 5)</div>
+      ${topProjects
+        .map(
+          ([name, count]) => `
+        <div class="stats-bar-row">
+          <div class="stats-bar-label">${escapeHtml(name)}</div>
+          <div class="stats-bar-container">
+            <div class="stats-bar-fill" style="width:${(count / maxProjectCount) * 100}%"></div>
+            <span class="stats-bar-count">${count}</span>
+          </div>
+        </div>`
+        )
+        .join("")}
+    </div>
+    <div class="stats-section">
+      <div class="stats-section-title">月度活跃</div>
+      ${months
+        .map(
+          ([month, count]) => `
+        <div class="stats-bar-row">
+          <div class="stats-bar-label">${month} 月</div>
+          <div class="stats-bar-container">
+            <div class="stats-bar-fill" style="width:${(count / maxMonthCount) * 100}%"></div>
+            <span class="stats-bar-count">${count}</span>
+          </div>
+        </div>`
+        )
+        .join("")}
+    </div>
+  `;
+
+  statsPanel.innerHTML = html;
+}
+
+// === 会话加载 ===
 async function loadSessions() {
   try {
     if (currentQuery.trim()) {
@@ -100,6 +220,7 @@ async function loadSessions() {
     }
     selectedIndex = 0;
     render();
+    fetchGitInfoForVisible();
   } catch (e) {
     console.error("加载会话失败:", e);
   }
@@ -110,21 +231,39 @@ function sortSessions(list) {
   if (sortMode === "name") {
     return [...list].sort((a, b) => a.project_name.localeCompare(b.project_name));
   }
-  // 默认按时间降序（后端已排好，但切换排序后需重排）
   return [...list].sort((a, b) => b.updated_at.localeCompare(a.updated_at));
 }
 
 /// 按当前 provider 过滤
 function filteredSessions() {
-  if (providerFilter === "all") return sessions;
-  return sessions.filter(s => s.provider === providerFilter);
+  let list = sessions;
+  if (providerFilter !== "all") {
+    list = list.filter((s) => s.provider === providerFilter);
+  }
+  return list;
+}
+
+/// Feature 3: 将收藏的会话排到前面
+function applyFavoriteSort(list) {
+  const favSet = new Set(favorites);
+  const favItems = [];
+  const normalItems = [];
+  list.forEach((s) => {
+    if (favSet.has(s.session_id)) {
+      favItems.push(s);
+    } else {
+      normalItems.push(s);
+    }
+  });
+  return [...favItems, ...normalItems];
 }
 
 function render() {
   sessionList.innerHTML = "";
-  const list = filteredSessions();
+  const list = applyFavoriteSort(filteredSessions());
   if (list.length === 0) {
     sessionList.innerHTML = '<div class="empty-state">没有找到会话</div>';
+    previewPanel.style.display = "none";
     return;
   }
   if (viewMode === "project") {
@@ -132,6 +271,8 @@ function render() {
   } else {
     renderTimeline(list);
   }
+  // 更新预览
+  updatePreview();
 }
 
 function renderTimeline(list) {
@@ -149,19 +290,17 @@ function renderGrouped(list) {
     groups[key].push(s);
   });
 
-  // 对分组排序：按名称排序时按组名字母序，按时间排序时按组内最新会话时间降序
   let sortedEntries = Object.entries(groups);
   if (sortMode === "name") {
     sortedEntries.sort(([a], [b]) => a.localeCompare(b));
   } else {
     sortedEntries.sort(([, a], [, b]) => {
-      const latestA = a.reduce((max, s) => s.updated_at > max ? s.updated_at : max, "");
-      const latestB = b.reduce((max, s) => s.updated_at > max ? s.updated_at : max, "");
+      const latestA = a.reduce((max, s) => (s.updated_at > max ? s.updated_at : max), "");
+      const latestB = b.reduce((max, s) => (s.updated_at > max ? s.updated_at : max), "");
       return latestB.localeCompare(latestA);
     });
   }
 
-  // 组内会话也按当前排序
   let globalIdx = 0;
   sortedEntries.forEach(([name, items]) => {
     const sortedItems = sortSessions(items);
@@ -180,28 +319,283 @@ function createSessionItem(session, index) {
   const item = document.createElement("div");
   item.className = "session-item" + (index === selectedIndex ? " selected" : "");
   item.dataset.index = index;
+  item.dataset.sessionId = session.session_id;
 
+  const isFav = favorites.includes(session.session_id);
   const promptText = session.last_prompt || session.first_prompt || "";
   const displayPrompt = highlightMatch(truncate(promptText, 80), currentQuery);
-
   const providerBadge = `<span class="provider-badge provider-${session.provider}">${session.provider}</span>`;
+
+  // Feature 3: 收藏按钮
+  const favBtnHtml = `<button class="fav-btn ${isFav ? "favorited" : ""}" data-sid="${session.session_id}" title="收藏">${isFav ? "★" : "☆"}</button>`;
+
+  // Feature 2: Git 信息
+  let gitHtml = "";
+  const gi = gitInfoCache[session.project_path];
+  if (gi) {
+    gitHtml = `<span class="git-info"><span class="git-branch">${escapeHtml(gi.branch)}</span>`;
+    if (gi.dirty_count > 0) {
+      gitHtml += `<span class="git-dirty">${gi.dirty_count}</span>`;
+    }
+    gitHtml += `</span>`;
+  }
+
+  // Feature 6: 标签
+  const sessionTags = allTags[session.session_id] || [];
+  let tagsHtml = "";
+  if (sessionTags.length > 0 || index === selectedIndex) {
+    tagsHtml = `<div class="tags-row">`;
+    sessionTags.forEach((t) => {
+      tagsHtml += `<span class="tag-pill">${escapeHtml(t)}</span>`;
+    });
+    tagsHtml += `<button class="tag-add-btn" data-sid="${session.session_id}">+</button>`;
+    tagsHtml += `</div>`;
+  }
 
   item.innerHTML = `
     <div class="header">
-      <span class="project-info">${providerBadge}<span class="project-name">${escapeHtml(session.project_name)}</span></span>
+      <span class="project-info">${favBtnHtml}${providerBadge}<span class="project-name">${escapeHtml(session.project_name)}</span>${gitHtml}</span>
       <span class="time">${escapeHtml(session.updated_at)}</span>
     </div>
     <div class="prompt">${displayPrompt}</div>
+    ${tagsHtml}
   `;
 
-  item.addEventListener("click", () => {
+  // 点击恢复会话
+  item.addEventListener("click", (e) => {
+    // 不在星标/标签按钮上触发
+    if (e.target.closest(".fav-btn") || e.target.closest(".tag-add-btn") || e.target.closest(".tag-pill")) return;
     selectedIndex = index;
     render();
     resumeSession(session);
   });
 
+  // Feature 4: 右键菜单
+  item.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    showContextMenu(e.clientX, e.clientY, session);
+  });
+
+  // Feature 3: 收藏按钮点击
+  const favBtn = item.querySelector(".fav-btn");
+  if (favBtn) {
+    favBtn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      await toggleFavorite(session.session_id);
+    });
+  }
+
+  // Feature 6: 标签编辑按钮
+  const tagAddBtn = item.querySelector(".tag-add-btn");
+  if (tagAddBtn) {
+    tagAddBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      startTagEdit(session.session_id, item);
+    });
+  }
+
+  // Feature 6: 标签点击过滤搜索
+  item.querySelectorAll(".tag-pill").forEach((pill) => {
+    pill.addEventListener("click", (e) => {
+      e.stopPropagation();
+      searchInput.value = pill.textContent;
+      currentQuery = pill.textContent;
+      loadSessions();
+    });
+  });
+
   return item;
 }
+
+// ======================== Feature 1: 预览面板 ========================
+
+let previewTimer = null;
+let lastPreviewId = "";
+
+function updatePreview() {
+  clearTimeout(previewTimer);
+  const list = applyFavoriteSort(filteredSessions());
+  const current = list[selectedIndex];
+  if (!current) {
+    previewPanel.style.display = "none";
+    return;
+  }
+  if (current.session_id === lastPreviewId) return;
+
+  previewTimer = setTimeout(async () => {
+    try {
+      const msgs = await invoke("get_session_preview", {
+        sessionId: current.session_id,
+      });
+      lastPreviewId = current.session_id;
+      if (msgs.length === 0) {
+        previewPanel.style.display = "none";
+        return;
+      }
+      previewMessages.innerHTML = msgs
+        .map((m) => `<div class="preview-msg">${escapeHtml(truncate(m, 120))}</div>`)
+        .join("");
+      if (!settingsOpen && !statsOpen) {
+        previewPanel.style.display = "";
+      }
+    } catch (_) {
+      previewPanel.style.display = "none";
+    }
+  }, 200);
+}
+
+// ======================== Feature 2: Git 信息 ========================
+
+async function fetchGitInfoForVisible() {
+  // 收集不重复的 project_path
+  const paths = [...new Set(sessions.map((s) => s.project_path))];
+  for (const p of paths) {
+    if (gitInfoCache[p]) continue;
+    try {
+      const info = await invoke("get_project_git_info", { projectPath: p });
+      if (info) {
+        gitInfoCache[p] = info;
+      }
+    } catch (_) {
+      // 非 git 仓库，忽略
+    }
+  }
+  // 拿到数据后重新渲染（只更新 git 徽章，不重置选中状态）
+  render();
+}
+
+// ======================== Feature 3: 收藏 ========================
+
+async function toggleFavorite(sessionId) {
+  try {
+    await invoke("toggle_favorite", { sessionId });
+    favorites = await invoke("get_favorites");
+    render();
+  } catch (e) {
+    console.error("收藏操作失败:", e);
+  }
+}
+
+// ======================== Feature 4: 右键菜单 ========================
+
+function showContextMenu(x, y, session) {
+  contextSession = session;
+  contextMenu.style.display = "";
+  contextMenu.style.left = `${x}px`;
+  contextMenu.style.top = `${y}px`;
+
+  // 防止溢出窗口
+  const rect = contextMenu.getBoundingClientRect();
+  if (rect.right > window.innerWidth) {
+    contextMenu.style.left = `${window.innerWidth - rect.width - 4}px`;
+  }
+  if (rect.bottom > window.innerHeight) {
+    contextMenu.style.top = `${window.innerHeight - rect.height - 4}px`;
+  }
+}
+
+function hideContextMenu() {
+  contextMenu.style.display = "none";
+  contextSession = null;
+}
+
+// 右键菜单事件绑定
+contextMenu.querySelectorAll(".ctx-item").forEach((item) => {
+  item.addEventListener("click", async () => {
+    if (!contextSession) return;
+    const action = item.dataset.action;
+    const s = contextSession;
+    hideContextMenu();
+
+    switch (action) {
+      case "resume":
+        await resumeSession(s);
+        break;
+      case "vscode":
+        try {
+          await invoke("open_in_vscode", { projectPath: s.project_path });
+        } catch (e) {
+          console.error("打开 VS Code 失败:", e);
+        }
+        break;
+      case "explorer":
+        try {
+          await invoke("open_in_explorer", { projectPath: s.project_path });
+        } catch (e) {
+          console.error("打开文件管理器失败:", e);
+        }
+        break;
+      case "copy-path":
+        if (navigator.clipboard) {
+          await navigator.clipboard.writeText(s.project_path);
+        }
+        break;
+      case "copy-cmd":
+        await copyCommand(s);
+        break;
+    }
+  });
+});
+
+// 点击其他地方或按 Esc 关闭菜单
+document.addEventListener("click", (e) => {
+  if (!contextMenu.contains(e.target)) {
+    hideContextMenu();
+  }
+});
+
+// ======================== Feature 6: 标签编辑 ========================
+
+function startTagEdit(sessionId, itemEl) {
+  const tagsRow = itemEl.querySelector(".tags-row");
+  if (!tagsRow) return;
+
+  const currentTags = allTags[sessionId] || [];
+  const input = document.createElement("input");
+  input.className = "tag-input";
+  input.value = currentTags.join(", ");
+  input.placeholder = "逗号分隔标签...";
+
+  // 隐藏标签按钮，显示输入框
+  const addBtn = tagsRow.querySelector(".tag-add-btn");
+  if (addBtn) addBtn.style.display = "none";
+
+  tagsRow.appendChild(input);
+  input.focus();
+
+  const commit = async () => {
+    const raw = input.value.trim();
+    const tags = raw
+      ? raw
+          .split(/[,，]/)
+          .map((t) => t.trim())
+          .filter((t) => t)
+      : [];
+    try {
+      await invoke("set_tags", { sessionId, tags });
+      allTags = await invoke("get_all_tags");
+    } catch (e) {
+      console.error("保存标签失败:", e);
+    }
+    render();
+  };
+
+  input.addEventListener("blur", commit);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      input.blur();
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      input.value = currentTags.join(", ");
+      input.blur();
+    }
+    e.stopPropagation(); // 防止触发全局快捷键
+  });
+}
+
+// ======================== 搜索与导航 ========================
 
 let searchTimer = null;
 searchInput.addEventListener("input", () => {
@@ -227,10 +621,14 @@ providerFilterSelect.addEventListener("change", () => {
 });
 
 document.addEventListener("keydown", async (e) => {
+  // 如果在标签输入框中，不处理全局快捷键
+  if (e.target.classList.contains("tag-input")) return;
+
   if (e.key === "ArrowDown") {
     e.preventDefault();
     if (selectedIndex < sessions.length - 1) {
       selectedIndex++;
+      lastPreviewId = ""; // 强制刷新预览
       render();
       scrollToSelected();
     }
@@ -238,22 +636,29 @@ document.addEventListener("keydown", async (e) => {
     e.preventDefault();
     if (selectedIndex > 0) {
       selectedIndex--;
+      lastPreviewId = "";
       render();
       scrollToSelected();
     }
   } else if (e.key === "Enter") {
     e.preventDefault();
-    if (sessions[selectedIndex]) {
-      await resumeSession(sessions[selectedIndex]);
+    const list = applyFavoriteSort(filteredSessions());
+    if (list[selectedIndex]) {
+      await resumeSession(list[selectedIndex]);
     }
   } else if (e.key === "c" && e.ctrlKey) {
     e.preventDefault();
-    if (sessions[selectedIndex]) {
-      await copyCommand(sessions[selectedIndex]);
+    const list = applyFavoriteSort(filteredSessions());
+    if (list[selectedIndex]) {
+      await copyCommand(list[selectedIndex]);
     }
   } else if (e.key === "Escape") {
-    if (settingsOpen) {
+    if (contextMenu.style.display !== "none") {
+      hideContextMenu();
+    } else if (settingsOpen) {
       closeSettings();
+    } else if (statsOpen) {
+      closeStats();
     } else {
       await appWindow.hide();
     }
@@ -295,6 +700,8 @@ async function copyCommand(session) {
   }
 }
 
+// ======================== 工具函数 ========================
+
 function escapeHtml(str) {
   const div = document.createElement("div");
   div.textContent = str || "";
@@ -310,10 +717,11 @@ function highlightMatch(text, query) {
   if (!query || !query.trim()) return escapeHtml(text);
   const escaped = escapeHtml(text);
   const queryEscaped = escapeHtml(query.trim());
-  const regex = new RegExp(`(${queryEscaped.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, "gi");
+  const regex = new RegExp(`(${queryEscaped.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi");
   return escaped.replace(regex, "<mark>$1</mark>");
 }
 
+// 窗口可见时刷新
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) {
     searchInput.focus();
