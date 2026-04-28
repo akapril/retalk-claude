@@ -108,10 +108,18 @@ pub fn run() {
             let quit_i = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show_i, &quit_i])?;
 
+            // macOS 使用模板图标（黑色+透明，系统自动适配深色/浅色模式）
+            // Windows/Linux 使用彩色图标
+            #[cfg(target_os = "macos")]
+            let tray_icon = tauri::include_image!("icons/tray-macosTemplate.png");
+            #[cfg(not(target_os = "macos"))]
+            let tray_icon = tauri::include_image!("icons/tray-32.png");
+
             let _tray = TrayIconBuilder::new()
-                .icon(tauri::include_image!("icons/tray-32.png"))
+                .icon(tray_icon)
+                .icon_as_template(cfg!(target_os = "macos"))
                 .menu(&menu)
-                .tooltip("retalk - Claude Code 会话管理")
+                .tooltip("retalk - AI 编码助手会话管理")
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show" => toggle_window(app),
