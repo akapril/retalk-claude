@@ -1245,11 +1245,13 @@ document.getElementById("auto-tag-btn").addEventListener("click", async () => {
 });
 
 document.getElementById("rebuild-index-btn").addEventListener("click", async () => {
+  showToast("正在后台重建索引...");
   try {
-    showToast("正在重建索引...");
-    const count = await invoke("rebuild_index");
-    showToast(`索引重建完成，共 ${count} 条会话`);
+    await invoke("rebuild_index");
+    // 等待重建完成（轮询检查数据是否更新）
+    await new Promise((r) => setTimeout(r, 2000));
     await loadSessions();
+    showToast("索引重建完成");
   } catch (e) {
     showToast("重建失败: " + e);
   }

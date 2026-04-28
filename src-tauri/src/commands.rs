@@ -390,14 +390,17 @@ pub fn get_all_tags(state: State<AppState>) -> TagsMap {
 // 重建索引
 // ============================================================
 
+/// 触发后台重建索引（非阻塞）
 #[tauri::command]
-pub fn rebuild_index(state: State<AppState>) -> Result<u32, String> {
-    let sessions = crate::scanner::scan_all_sessions();
-    let count = sessions.len() as u32;
-    let index = state.index.lock();
-    index.rebuild(&sessions).map_err(|e| e.to_string())?;
-    *state.sessions.lock() = sessions;
-    Ok(count)
+pub fn rebuild_index(state: State<AppState>) {
+    let index = Arc::clone(&state.index);
+    let sessions_cache = Arc::clone(&state.sessions);
+    std::thread::spawn(move || {
+        let sessions = crate::scanner::scan_all_sessions();
+        let _ = index.lock().rebuild(&sessions);
+        *sessions_cache.lock() = sessions;
+        eprintln!("[retalk] 索引重建完成");
+    });
 }
 
 // ============================================================
