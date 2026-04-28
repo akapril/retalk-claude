@@ -8,7 +8,7 @@ name = "retalk_lib"
 crate-type = ["lib"]
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon"] }
+tauri = { version = "2", features = ["tray-icon", "macos-private-api"] }
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-shell = "2"
@@ -23,6 +23,10 @@ chrono = { version = "0.4", features = ["serde"] }
 dirs = "6"
 parking_lot = "0.12"
 rusqlite = { version = "0.33", features = ["bundled"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+cocoa = "0.26"
+objc = "0.2"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

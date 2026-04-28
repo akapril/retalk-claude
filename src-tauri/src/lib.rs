@@ -156,11 +156,21 @@ pub fn run() {
 
             app.global_shortcut().register(hotkey)?;
 
-            // === macOS: 隐藏 Dock 图标 + 设置窗口背景透明 ===
+            // === macOS: 隐藏 Dock 图标 + NSWindow 背景透明 ===
             #[cfg(target_os = "macos")]
             {
-                // 设置为 accessory 级别应用（不在 Dock 显示）
                 app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+                if let Some(window) = app.get_webview_window("main") {
+                    use cocoa::appkit::{NSColor, NSWindow};
+                    use cocoa::base::{id, nil, NO};
+
+                    let ns_win: id = window.ns_window().unwrap() as id;
+                    unsafe {
+                        ns_win.setBackgroundColor_(NSColor::clearColor(nil));
+                        ns_win.setOpaque_(NO);
+                    }
+                }
             }
 
             // === 窗口失焦自动隐藏 ===
