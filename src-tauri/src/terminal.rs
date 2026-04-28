@@ -50,9 +50,9 @@ pub fn build_resume_command(provider: &str, project_path: &str, session_id: &str
         _ => String::new(),
     };
     if resume_cmd.is_empty() {
-        format!("cd \"{}\"", project_path)
+        format!("cd /d \"{}\"", project_path)
     } else {
-        format!("cd \"{}\" && {}", project_path, resume_cmd)
+        format!("cd /d \"{}\" && {}", project_path, resume_cmd)
     }
 }
 
