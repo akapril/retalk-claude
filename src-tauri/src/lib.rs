@@ -45,6 +45,8 @@ pub fn run() {
     let favorites = commands::load_favorites();
     let tags = commands::load_tags();
 
+    let ready = Arc::new(std::sync::atomic::AtomicBool::new(false));
+
     let state = AppState {
         index: Arc::clone(&index),
         updater: Arc::clone(&updater_instance),
@@ -52,6 +54,7 @@ pub fn run() {
         sessions: Arc::new(Mutex::new(Vec::new())),
         favorites: Arc::new(Mutex::new(favorites)),
         tags: Arc::new(Mutex::new(tags)),
+        ready: Arc::clone(&ready),
     };
 
     // 后台线程：扫描数据 + 建立索引 + 启动更新策略（不阻塞 UI）
@@ -59,13 +62,15 @@ pub fn run() {
     let bg_updater = Arc::clone(&updater_instance);
     let bg_sessions = Arc::clone(&state.sessions);
     let bg_config = app_config.clone();
+    let bg_ready = Arc::clone(&ready);
     std::thread::spawn(move || {
         eprintln!("[retalk] 后台扫描开始...");
         let sessions = scanner::scan_all_sessions();
         eprintln!("[retalk] 扫描完成，共 {} 条会话，开始建索引...", sessions.len());
         let _ = bg_index.lock().rebuild(&sessions);
         *bg_sessions.lock() = sessions;
-        eprintln!("[retalk] 索引建立完成");
+        bg_ready.store(true, std::sync::atomic::Ordering::Relaxed);
+        eprintln!("[retalk] 索引建立完成，数据就绪");
 
         // 启动后台更新策略
         bg_updater.start_watcher(Arc::clone(&bg_index), &bg_config);
@@ -154,6 +159,7 @@ pub fn run() {
             commands::export_session_to_file,
             commands::get_desktop_path,
             commands::open_in_explorer_select,
+            commands::is_ready,
         ])
         .run(tauri::generate_context!())
         .expect("启动 retalk 失败");

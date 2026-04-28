@@ -21,6 +21,14 @@ pub struct AppState {
     pub favorites: Arc<Mutex<Vec<String>>>,
     /// 会话标签：session_id -> [tag1, tag2, ...]
     pub tags: Arc<Mutex<TagsMap>>,
+    /// 后台扫描是否完成
+    pub ready: Arc<std::sync::atomic::AtomicBool>,
+}
+
+/// 检查后台数据是否就绪
+#[tauri::command]
+pub fn is_ready(state: State<AppState>) -> bool {
+    state.ready.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 /// 全文搜索会话，支持按 provider 过滤

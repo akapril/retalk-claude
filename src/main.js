@@ -97,8 +97,24 @@ async function init() {
     allTags = await invoke("get_all_tags");
   } catch (_) { /* 忽略 */ }
 
+  // 等待后台扫描完成再加载数据
+  await waitForReady();
   await loadSessions();
   searchInput.focus();
+}
+
+/// 等待后台数据扫描完成
+async function waitForReady() {
+  let ready = false;
+  while (!ready) {
+    try {
+      ready = await invoke("is_ready");
+    } catch (_) {}
+    if (!ready) {
+      sessionList.innerHTML = '<div class="empty-state">正在扫描会话数据...</div>';
+      await new Promise((r) => setTimeout(r, 300));
+    }
+  }
 }
 
 // === 设置面板 ===
