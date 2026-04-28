@@ -96,7 +96,7 @@ impl Default for AppConfig {
             },
             ui: UiConfig {
                 theme: "dark".to_string(),
-                max_results: 50,
+                max_results: 1000,
             },
         }
     }

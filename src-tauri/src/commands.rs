@@ -36,12 +36,11 @@ pub fn search(
     searcher::search(&index, &query, max, filter)
 }
 
-/// 列出会话（按更新时间降序），支持 provider 过滤和分页
+/// 列出会话（按更新时间降序），支持 provider 过滤
 #[tauri::command]
 pub fn list_sessions(
     state: State<AppState>,
     provider_filter: Option<String>,
-    offset: Option<usize>,
 ) -> Vec<SearchResult> {
     let config = state.config.lock().clone();
 
@@ -58,7 +57,7 @@ pub fn list_sessions(
 
     let filter = provider_filter.as_deref().filter(|p| *p != "all");
     let index = state.index.lock();
-    searcher::list_all(&index, config.ui.max_results, offset.unwrap_or(0), filter)
+    searcher::list_all(&index, config.ui.max_results, filter)
 }
 
 /// 在终端中恢复 AI 编码工具会话
