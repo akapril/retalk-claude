@@ -50,6 +50,13 @@ pub fn list_sessions(
     state: State<AppState>,
     provider_filter: Option<String>,
 ) -> Vec<SearchResult> {
+    // 后台扫描未完成时直接返回当前索引数据（可能为空）
+    if !state.ready.load(std::sync::atomic::Ordering::Relaxed) {
+        let index = state.index.lock();
+        let filter = provider_filter.as_deref().filter(|p| *p != "all");
+        return searcher::list_all(&index, 0, filter);
+    }
+
     let config = state.config.lock().clone();
 
     // 按需刷新

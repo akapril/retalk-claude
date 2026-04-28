@@ -99,6 +99,7 @@ async function init() {
 
   // 等待后台扫描完成再加载数据
   await waitForReady();
+  dataReady = true;
   await loadSessions();
   searchInput.focus();
 }
@@ -284,7 +285,11 @@ function renderStats() {
 }
 
 // === 会话加载 ===
+let dataReady = false;
+
 async function loadSessions() {
+  // 后台扫描未完成时跳过，避免锁竞争导致卡死
+  if (!dataReady) return;
   try {
     if (currentQuery.trim()) {
       sessions = await invoke("search", { query: currentQuery, providerFilter });
