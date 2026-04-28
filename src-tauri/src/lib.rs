@@ -50,10 +50,17 @@ pub fn run() {
     updater_instance.start_watcher(Arc::clone(&index), &app_config);
     updater_instance.start_poll(Arc::clone(&index), &app_config);
 
+    // 加载收藏和标签
+    let favorites = commands::load_favorites();
+    let tags = commands::load_tags();
+
     let state = AppState {
         index,
         updater: updater_instance,
         config: Arc::new(Mutex::new(app_config)),
+        sessions: Arc::new(Mutex::new(sessions)),
+        favorites: Arc::new(Mutex::new(favorites)),
+        tags: Arc::new(Mutex::new(tags)),
     };
 
     tauri::Builder::default()
@@ -126,6 +133,14 @@ pub fn run() {
             commands::get_stats,
             commands::get_config,
             commands::save_config,
+            commands::get_session_preview,
+            commands::get_project_git_info,
+            commands::toggle_favorite,
+            commands::get_favorites,
+            commands::open_in_vscode,
+            commands::open_in_explorer,
+            commands::set_tags,
+            commands::get_all_tags,
         ])
         .run(tauri::generate_context!())
         .expect("启动 retalk 失败");

@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// AI 编码工具会话（支持多 provider）
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -99,6 +100,16 @@ impl Default for AppConfig {
         }
     }
 }
+
+/// Git 仓库信息
+#[derive(Debug, Clone, Serialize)]
+pub struct GitInfo {
+    pub branch: String,
+    pub dirty_count: u32,
+}
+
+/// 会话标签存储：session_id -> [tag1, tag2, ...]
+pub type TagsMap = HashMap<String, Vec<String>>;
 
 /// 更新策略性能统计
 #[derive(Debug, Clone, Serialize, Deserialize)]

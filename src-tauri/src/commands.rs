@@ -1,10 +1,12 @@
 use crate::config;
 use crate::indexer::SessionIndex;
-use crate::models::{AppConfig, UpdateStats};
+use crate::models::{AppConfig, GitInfo, Session, TagsMap, UpdateStats};
 use crate::searcher::{self, SearchResult};
 use crate::terminal;
 use crate::updater::Updater;
 use parking_lot::Mutex;
+use std::collections::HashMap;
+use std::process::Command;
 use std::sync::Arc;
 use tauri::State;
 
@@ -13,6 +15,12 @@ pub struct AppState {
     pub index: Arc<Mutex<SessionIndex>>,
     pub updater: Arc<Updater>,
     pub config: Arc<Mutex<AppConfig>>,
+    /// 缓存的全量会话列表（供预览等功能查询）
+    pub sessions: Arc<Mutex<Vec<Session>>>,
+    /// 收藏的会话 ID 列表
+    pub favorites: Arc<Mutex<Vec<String>>>,
+    /// 会话标签：session_id -> [tag1, tag2, ...]
+    pub tags: Arc<Mutex<TagsMap>>,
 }
 
 /// 全文搜索会话
@@ -34,9 +42,15 @@ pub fn list_sessions(
     let config = state.config.lock().clone();
 
     // 按需刷新：先获取索引锁，刷新后释放
-    {
+    let refreshed = {
         let index = state.index.lock();
-        state.updater.on_demand_refresh(&index, &config);
+        state.updater.on_demand_refresh(&index, &config)
+    };
+
+    // 如果发生了刷新，同步更新 sessions 缓存
+    if refreshed {
+        let fresh = crate::scanner::scan_all_sessions();
+        *state.sessions.lock() = fresh;
     }
 
     let index = state.index.lock();
@@ -86,4 +100,185 @@ pub fn save_config(
 ) {
     config::save_config(&new_config);
     *state.config.lock() = new_config;
+}
+
+// ============================================================
+// Feature 1: 会话预览 — 返回指定会话的最后 3 条用户消息
+// ============================================================
+
+#[tauri::command]
+pub fn get_session_preview(
+    state: State<AppState>,
+    session_id: String,
+) -> Vec<String> {
+    let sessions = state.sessions.lock();
+    sessions
+        .iter()
+        .find(|s| s.session_id == session_id)
+        .map(|s| {
+            let msgs = &s.user_messages;
+            let start = if msgs.len() > 3 { msgs.len() - 3 } else { 0 };
+            msgs[start..].to_vec()
+        })
+        .unwrap_or_default()
+}
+
+// ============================================================
+// Feature 2: 项目 Git 信息
+// ============================================================
+
+#[tauri::command]
+pub fn get_project_git_info(project_path: String) -> Option<GitInfo> {
+    // 获取当前分支名
+    let branch_output = Command::new("git")
+        .args(["-C", &project_path, "rev-parse", "--abbrev-ref", "HEAD"])
+        .output()
+        .ok()?;
+    if !branch_output.status.success() {
+        return None;
+    }
+    let branch = String::from_utf8_lossy(&branch_output.stdout)
+        .trim()
+        .to_string();
+
+    // 获取未提交变更数
+    let status_output = Command::new("git")
+        .args(["-C", &project_path, "status", "--porcelain"])
+        .output()
+        .ok()?;
+    let dirty_count = String::from_utf8_lossy(&status_output.stdout)
+        .lines()
+        .filter(|l| !l.is_empty())
+        .count() as u32;
+
+    Some(GitInfo {
+        branch,
+        dirty_count,
+    })
+}
+
+// ============================================================
+// Feature 3: 收藏/置顶
+// ============================================================
+
+/// 收藏文件路径
+fn favorites_path() -> std::path::PathBuf {
+    config::retalk_dir().join("favorites.json")
+}
+
+/// 从磁盘加载收藏列表
+pub fn load_favorites() -> Vec<String> {
+    let path = favorites_path();
+    if path.exists() {
+        std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|c| serde_json::from_str(&c).ok())
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    }
+}
+
+/// 保存收藏列表到磁盘
+fn save_favorites(favs: &[String]) {
+    let path = favorites_path();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(&path, serde_json::to_string_pretty(favs).unwrap_or_default());
+}
+
+#[tauri::command]
+pub fn toggle_favorite(
+    state: State<AppState>,
+    session_id: String,
+) -> bool {
+    let mut favs = state.favorites.lock();
+    let is_fav = if let Some(pos) = favs.iter().position(|id| id == &session_id) {
+        favs.remove(pos);
+        false
+    } else {
+        favs.push(session_id);
+        true
+    };
+    save_favorites(&favs);
+    is_fav
+}
+
+#[tauri::command]
+pub fn get_favorites(state: State<AppState>) -> Vec<String> {
+    state.favorites.lock().clone()
+}
+
+// ============================================================
+// Feature 4: 快捷操作 — 在 VS Code / 文件管理器中打开
+// ============================================================
+
+#[tauri::command]
+pub fn open_in_vscode(project_path: String) -> Result<(), String> {
+    Command::new("code")
+        .arg(&project_path)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn open_in_explorer(project_path: String) -> Result<(), String> {
+    Command::new("explorer")
+        .arg(&project_path)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+// ============================================================
+// Feature 6: 会话标签系统
+// ============================================================
+
+/// 标签文件路径
+fn tags_path() -> std::path::PathBuf {
+    config::retalk_dir().join("tags.json")
+}
+
+/// 从磁盘加载标签
+pub fn load_tags() -> TagsMap {
+    let path = tags_path();
+    if path.exists() {
+        std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|c| serde_json::from_str(&c).ok())
+            .unwrap_or_default()
+    } else {
+        HashMap::new()
+    }
+}
+
+/// 保存标签到磁盘
+fn save_tags(tags: &TagsMap) {
+    let path = tags_path();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(&path, serde_json::to_string_pretty(tags).unwrap_or_default());
+}
+
+#[tauri::command]
+pub fn set_tags(
+    state: State<AppState>,
+    session_id: String,
+    tags: Vec<String>,
+) {
+    let mut all_tags = state.tags.lock();
+    if tags.is_empty() {
+        all_tags.remove(&session_id);
+    } else {
+        all_tags.insert(session_id, tags);
+    }
+    save_tags(&all_tags);
+}
+
+#[tauri::command]
+pub fn get_all_tags(state: State<AppState>) -> TagsMap {
+    state.tags.lock().clone()
 }
