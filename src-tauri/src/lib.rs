@@ -46,9 +46,10 @@ pub fn run() {
     let favorites = commands::load_favorites();
     let tags = commands::load_tags();
 
-    // 如果有已有索引数据，立即标记就绪（UI 秒开）
+    // 如果有已有索引数据，立即标记就绪 + 初始化 mtime（防止 on_demand_refresh 触发全量扫描）
     let ready = Arc::new(std::sync::atomic::AtomicBool::new(has_existing_data));
     if has_existing_data {
+        updater_instance.init_mtime_snapshot();
         eprintln!("[retalk] 已有索引数据，UI 立即可用");
     }
 

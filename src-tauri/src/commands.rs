@@ -59,15 +59,14 @@ pub fn list_sessions(
 
     let config = state.config.lock().clone();
 
-    // 按需刷新
-    let refreshed = {
-        let index = state.index.lock();
-        state.updater.on_demand_refresh(&index, &config)
-    };
-
-    if refreshed {
-        let fresh = crate::scanner::scan_all_sessions();
-        *state.sessions.lock() = fresh;
+    // 按需刷新：尝试获取锁，获取不到说明后台正在同步，跳过
+    if let Some(index) = state.index.try_lock() {
+        let refreshed = state.updater.on_demand_refresh(&index, &config);
+        drop(index);
+        if refreshed {
+            let fresh = crate::scanner::scan_all_sessions();
+            *state.sessions.lock() = fresh;
+        }
     }
 
     let filter = provider_filter.as_deref().filter(|p| *p != "all");
