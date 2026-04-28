@@ -184,16 +184,50 @@ fn get_tool_version(cmd: &str) -> (bool, String) {
 
     match make_cmd(cmd).arg("--version").output() {
         Ok(output) if output.status.success() => {
-            let ver = String::from_utf8_lossy(&output.stdout)
-                .lines()
-                .next()
-                .unwrap_or("")
-                .trim()
-                .to_string();
+            // 合并 stdout + stderr，提取版本号（兼容 Gemini 等把警告混入输出的情况）
+            let combined = format!(
+                "{} {}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let ver = extract_version_string(&combined);
             (true, ver)
+        }
+        Ok(output) => {
+            // exit code 非 0 但可能有输出（某些工具 --version 返回非零）
+            let combined = format!(
+                "{} {}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let ver = extract_version_string(&combined);
+            if !ver.is_empty() {
+                (true, ver)
+            } else {
+                (false, String::new())
+            }
         }
         _ => (false, String::new()),
     }
+}
+
+/// 从混合输出中提取版本号（如 "0.32.1", "2.1.86", "codex-cli 0.121.0"）
+fn extract_version_string(text: &str) -> String {
+    // 匹配 x.y.z 格式的版本号
+    for word in text.split_whitespace().rev() {
+        // 从后往前找，版本号通常在最后
+        let trimmed = word.trim_matches(|c: char| !c.is_ascii_digit() && c != '.');
+        let parts: Vec<&str> = trimmed.split('.').collect();
+        if parts.len() >= 2 && parts.iter().all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit())) {
+            return trimmed.to_string();
+        }
+    }
+    // 兜底：取第一行非空内容
+    text.lines()
+        .map(|l| l.trim())
+        .find(|l| !l.is_empty())
+        .unwrap_or("")
+        .to_string()
 }
 
 fn count_claude_sessions(home: &std::path::Path) -> u32 {
