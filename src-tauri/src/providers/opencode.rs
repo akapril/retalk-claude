@@ -2,13 +2,12 @@ use super::SessionProvider;
 use crate::models::Session;
 use chrono::{TimeZone, Utc};
 use rusqlite::Connection;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub struct OpenCodeProvider;
 
 /// 获取 OpenCode 数据库路径
 fn opencode_db_path() -> PathBuf {
-    // Windows: ~/.local/share/opencode/opencode.db
     dirs::home_dir()
         .expect("无法获取 home 目录")
         .join(".local")
@@ -27,101 +26,100 @@ impl SessionProvider for OpenCodeProvider {
     }
 
     fn scan_all(&self) -> Vec<Session> {
-        let db_path = opencode_db_path();
-        let conn = match Connection::open_with_flags(
-            &db_path,
-            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
-        ) {
-            Ok(c) => c,
-            Err(_) => return Vec::new(),
-        };
+        scan_sqlite_sessions(&opencode_db_path(), "opencode")
+    }
+}
 
-        let mut sessions = Vec::new();
+/// 通用 SQLite 会话扫描（OpenCode / Kilo Code 共用表结构）
+pub fn scan_sqlite_sessions(db_path: &Path, provider_name: &str) -> Vec<Session> {
+    let conn = match Connection::open_with_flags(
+        db_path,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    ) {
+        Ok(c) => c,
+        Err(_) => return Vec::new(),
+    };
 
-        // 查询所有 session，关联 project 获取 worktree
-        let mut stmt = match conn.prepare(
-            "SELECT s.id, s.title, s.directory, s.time_created, s.time_updated, p.worktree
-             FROM session s
-             LEFT JOIN project p ON s.project_id = p.id
-             ORDER BY s.time_updated DESC",
-        ) {
-            Ok(s) => s,
-            Err(_) => return sessions,
-        };
+    let mut sessions = Vec::new();
 
-        let session_rows: Vec<(String, String, String, i64, i64, String)> = stmt
-            .query_map([], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1).unwrap_or_default(),
-                    row.get::<_, String>(2).unwrap_or_default(),
-                    row.get::<_, i64>(3).unwrap_or(0),
-                    row.get::<_, i64>(4).unwrap_or(0),
-                    row.get::<_, String>(5).unwrap_or_default(),
-                ))
-            })
-            .ok()
-            .map(|rows| rows.filter_map(|r| r.ok()).collect())
-            .unwrap_or_default();
+    let mut stmt = match conn.prepare(
+        "SELECT s.id, s.title, s.directory, s.time_created, s.time_updated, p.worktree
+         FROM session s
+         LEFT JOIN project p ON s.project_id = p.id
+         ORDER BY s.time_updated DESC",
+    ) {
+        Ok(s) => s,
+        Err(_) => return sessions,
+    };
 
-        for (session_id, title, directory, time_created, time_updated, worktree) in session_rows {
-            // 获取该 session 的用户消息
-            let user_messages = get_user_messages(&conn, &session_id);
+    let session_rows: Vec<(String, String, String, i64, i64, String)> = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1).unwrap_or_default(),
+                row.get::<_, String>(2).unwrap_or_default(),
+                row.get::<_, i64>(3).unwrap_or(0),
+                row.get::<_, i64>(4).unwrap_or(0),
+                row.get::<_, String>(5).unwrap_or_default(),
+            ))
+        })
+        .ok()
+        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default();
 
-            if user_messages.is_empty() {
-                continue;
-            }
+    for (session_id, title, directory, time_created, time_updated, worktree) in session_rows {
+        let user_messages = get_user_messages(&conn, &session_id);
 
-            // 使用 directory 或 worktree 作为项目路径
-            let project_path = if !directory.is_empty() && directory != "/" {
-                directory
-            } else if !worktree.is_empty() && worktree != "/" {
-                worktree
-            } else {
-                continue;
-            };
-
-            let project_name = std::path::Path::new(&project_path)
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .to_string();
-
-            // 时间戳是毫秒
-            let created_at = Utc
-                .timestamp_opt(time_created / 1000, 0)
-                .single()
-                .unwrap_or_else(Utc::now);
-            let updated_at = Utc
-                .timestamp_opt(time_updated / 1000, 0)
-                .single()
-                .unwrap_or_else(Utc::now);
-
-            sessions.push(Session {
-                session_id,
-                provider: "opencode".to_string(),
-                project_path,
-                project_name,
-                first_prompt: user_messages
-                    .first()
-                    .cloned()
-                    .unwrap_or_else(|| title.clone()),
-                last_prompt: user_messages.last().cloned().unwrap_or_else(|| title),
-                created_at,
-                updated_at,
-                message_count: user_messages.len() as u32,
-                user_messages,
-                total_tokens: 0,
-            });
+        if user_messages.is_empty() {
+            continue;
         }
 
-        sessions
+        let project_path = if !directory.is_empty() && directory != "/" {
+            directory
+        } else if !worktree.is_empty() && worktree != "/" {
+            worktree
+        } else {
+            continue;
+        };
+
+        let project_name = std::path::Path::new(&project_path)
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+
+        let created_at = Utc
+            .timestamp_opt(time_created / 1000, 0)
+            .single()
+            .unwrap_or_else(Utc::now);
+        let updated_at = Utc
+            .timestamp_opt(time_updated / 1000, 0)
+            .single()
+            .unwrap_or_else(Utc::now);
+
+        sessions.push(Session {
+            session_id,
+            provider: provider_name.to_string(),
+            project_path,
+            project_name,
+            first_prompt: user_messages
+                .first()
+                .cloned()
+                .unwrap_or_else(|| title.clone()),
+            last_prompt: user_messages.last().cloned().unwrap_or_else(|| title),
+            created_at,
+            updated_at,
+            message_count: user_messages.len() as u32,
+            user_messages,
+            total_tokens: 0,
+        });
     }
+
+    sessions
 }
 
 /// 从 message + part 表中提取用户消息文本
 fn get_user_messages(conn: &Connection, session_id: &str) -> Vec<String> {
-    // 找出该 session 中所有 user 消息的 ID
     let mut msg_stmt = match conn.prepare(
         "SELECT id FROM message WHERE session_id = ?1 AND data LIKE '%\"role\":\"user\"%' ORDER BY time_created ASC",
     ) {
@@ -135,7 +133,6 @@ fn get_user_messages(conn: &Connection, session_id: &str) -> Vec<String> {
         .map(|rows| rows.filter_map(|r| r.ok()).collect())
         .unwrap_or_default();
 
-    // 对每个消息，获取 text 类型的 part
     let mut part_stmt = match conn.prepare(
         "SELECT data FROM part WHERE message_id = ?1 AND data LIKE '%\"type\":\"text\"%'",
     ) {

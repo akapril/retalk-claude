@@ -188,6 +188,11 @@ html, body {
   color: #3b82f6;
 }
 
+.provider-kilo {
+  background: rgba(236, 72, 153, 0.3);
+  color: #ec4899;
+}
+
 .provider-opencode {
   background: rgba(249, 115, 22, 0.3);
   color: #f97316;

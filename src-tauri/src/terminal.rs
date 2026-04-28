@@ -46,6 +46,7 @@ pub fn build_resume_command(provider: &str, project_path: &str, session_id: &str
         "codex" => format!("codex resume {}", session_id),
         "gemini" => format!("gemini --resume {}", session_id),
         "opencode" => format!("opencode --session {}", session_id),
+        "kilo" => format!("kilo --session {}", session_id),
         _ => String::new(),
     };
     if resume_cmd.is_empty() {
@@ -73,6 +74,7 @@ pub fn resume_in_terminal(
         "codex" => format!("codex resume {}", session_id),
         "gemini" => format!("gemini --resume {}", session_id),
         "opencode" => format!("opencode --session {}", session_id),
+        "kilo" => format!("kilo --session {}", session_id),
         _ => String::new(),
     };
 
