@@ -109,6 +109,8 @@ async function init() {
   // 等待后台扫描完成再加载数据
   await waitForReady();
   dataReady = true;
+  // 短延迟确保后台线程完全释放锁
+  await new Promise((r) => setTimeout(r, 200));
   await loadSessions();
   searchInput.focus();
 }
@@ -122,7 +124,7 @@ async function waitForReady() {
     } catch (_) {}
     if (!ready) {
       sessionList.innerHTML = '<div class="empty-state">正在扫描会话数据...</div>';
-      await new Promise((r) => setTimeout(r, 300));
+      await new Promise((r) => setTimeout(r, 500));
     }
   }
 }

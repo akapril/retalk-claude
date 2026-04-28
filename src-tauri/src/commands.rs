@@ -60,12 +60,18 @@ pub fn list_sessions(
     let config = state.config.lock().clone();
 
     // 按需刷新：尝试获取锁，获取不到说明后台正在同步，跳过
+    // 如果检测到变化，在后台线程刷新，不阻塞当前请求
     if let Some(index) = state.index.try_lock() {
         let refreshed = state.updater.on_demand_refresh(&index, &config);
         drop(index);
         if refreshed {
-            let fresh = crate::scanner::scan_all_sessions();
-            *state.sessions.lock() = fresh;
+            let bg_index = Arc::clone(&state.index);
+            let bg_sessions = Arc::clone(&state.sessions);
+            std::thread::spawn(move || {
+                let fresh = crate::scanner::scan_all_sessions();
+                let _ = bg_index.lock().rebuild(&fresh);
+                *bg_sessions.lock() = fresh;
+            });
         }
     }
 
