@@ -1,6 +1,11 @@
 const { invoke } = window.__TAURI__.core;
 const { getCurrentWindow } = window.__TAURI__.window;
 
+// macOS 透明窗口需要 margin 避免圆角白边
+if (navigator.platform.includes("Mac")) {
+  document.getElementById("app").style.cssText += "margin:4px;height:calc(100vh - 8px);";
+}
+
 let sessions = [];
 let selectedIndex = 0;
 let currentQuery = "";
