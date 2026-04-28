@@ -24,8 +24,60 @@
         <option value="time">按时间</option>
         <option value="name">按名称</option>
       </select>
+      <button id="settings-btn" class="icon-btn" title="设置">&#9881;</button>
     </div>
     <div id="session-list" class="session-list"></div>
+    <div id="settings-panel" class="settings-panel" style="display:none">
+      <div class="settings-section">
+        <div class="settings-title">快捷键</div>
+        <div class="settings-row">
+          <label>全局快捷键</label>
+          <input type="text" id="cfg-hotkey" class="settings-input" />
+        </div>
+      </div>
+      <div class="settings-section">
+        <div class="settings-title">终端</div>
+        <div class="settings-row">
+          <label>首选终端</label>
+          <select id="cfg-terminal" class="settings-select">
+            <option value="auto">自动检测</option>
+            <option value="wt">Windows Terminal</option>
+            <option value="pwsh">PowerShell</option>
+            <option value="cmd">CMD</option>
+          </select>
+        </div>
+      </div>
+      <div class="settings-section">
+        <div class="settings-title">数据更新</div>
+        <div class="settings-row">
+          <label>文件监听</label>
+          <input type="checkbox" id="cfg-watcher" />
+        </div>
+        <div class="settings-row">
+          <label>定时轮询</label>
+          <input type="checkbox" id="cfg-poll" />
+        </div>
+        <div class="settings-row">
+          <label>轮询间隔 (秒)</label>
+          <input type="number" id="cfg-poll-interval" class="settings-input settings-input-sm" min="5" max="300" />
+        </div>
+        <div class="settings-row">
+          <label>按需刷新</label>
+          <input type="checkbox" id="cfg-ondemand" />
+        </div>
+      </div>
+      <div class="settings-section">
+        <div class="settings-title">界面</div>
+        <div class="settings-row">
+          <label>最大结果数</label>
+          <input type="number" id="cfg-max-results" class="settings-input settings-input-sm" min="10" max="500" />
+        </div>
+      </div>
+      <div class="settings-actions">
+        <button id="settings-save" class="settings-btn-primary">保存</button>
+        <button id="settings-cancel" class="settings-btn">取消</button>
+      </div>
+    </div>
     <div class="status-bar">
       <span>↑↓ 导航</span>
       <span>Enter 恢复</span>

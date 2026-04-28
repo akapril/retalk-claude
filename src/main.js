@@ -11,12 +11,83 @@ const searchInput = document.getElementById("search-input");
 const sessionList = document.getElementById("session-list");
 const viewModeSelect = document.getElementById("view-mode");
 const sortModeSelect = document.getElementById("sort-mode");
+const settingsBtn = document.getElementById("settings-btn");
+const settingsPanel = document.getElementById("settings-panel");
 const appWindow = getCurrentWindow();
+
+let settingsOpen = false;
 
 async function init() {
   await loadSessions();
   searchInput.focus();
 }
+
+// === 设置面板 ===
+settingsBtn.addEventListener("click", async () => {
+  if (settingsOpen) {
+    closeSettings();
+  } else {
+    await openSettings();
+  }
+});
+
+async function openSettings() {
+  settingsOpen = true;
+  sessionList.style.display = "none";
+  settingsPanel.style.display = "";
+
+  // 加载当前配置
+  try {
+    const config = await invoke("get_config");
+    document.getElementById("cfg-hotkey").value = config.general.hotkey;
+    document.getElementById("cfg-terminal").value = config.terminal.preferred;
+    document.getElementById("cfg-watcher").checked = config.update.watcher_enabled;
+    document.getElementById("cfg-poll").checked = config.update.poll_enabled;
+    document.getElementById("cfg-poll-interval").value = config.update.poll_interval_secs;
+    document.getElementById("cfg-ondemand").checked = config.update.on_demand_enabled;
+    document.getElementById("cfg-max-results").value = config.ui.max_results;
+  } catch (e) {
+    console.error("加载配置失败:", e);
+  }
+}
+
+function closeSettings() {
+  settingsOpen = false;
+  settingsPanel.style.display = "none";
+  sessionList.style.display = "";
+  searchInput.focus();
+}
+
+document.getElementById("settings-cancel").addEventListener("click", closeSettings);
+
+document.getElementById("settings-save").addEventListener("click", async () => {
+  const newConfig = {
+    general: {
+      hotkey: document.getElementById("cfg-hotkey").value,
+    },
+    terminal: {
+      preferred: document.getElementById("cfg-terminal").value,
+    },
+    update: {
+      watcher_enabled: document.getElementById("cfg-watcher").checked,
+      poll_enabled: document.getElementById("cfg-poll").checked,
+      poll_interval_secs: parseInt(document.getElementById("cfg-poll-interval").value) || 30,
+      on_demand_enabled: document.getElementById("cfg-ondemand").checked,
+    },
+    ui: {
+      theme: "dark",
+      max_results: parseInt(document.getElementById("cfg-max-results").value) || 50,
+    },
+  };
+
+  try {
+    await invoke("save_config", { newConfig });
+    closeSettings();
+    await loadSessions(); // 刷新列表（max_results 可能变了）
+  } catch (e) {
+    console.error("保存配置失败:", e);
+  }
+});
 
 async function loadSessions() {
   try {
@@ -166,7 +237,11 @@ document.addEventListener("keydown", async (e) => {
       await copyCommand(sessions[selectedIndex]);
     }
   } else if (e.key === "Escape") {
-    await appWindow.hide();
+    if (settingsOpen) {
+      closeSettings();
+    } else {
+      await appWindow.hide();
+    }
   }
 });
 
