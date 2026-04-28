@@ -326,17 +326,25 @@ function renderEcosystem(data) {
         const badges = [];
         if (p.has_skills) badges.push(`<span class="eco-badge eco-badge-skill">${p.skill_count} skills</span>`);
         if (p.has_mcp) badges.push('<span class="eco-badge eco-badge-mcp">MCP</span>');
+        const statusClass = p.enabled ? "on" : "off";
+        const statusText = p.enabled ? "已启用" : "已禁用";
         contentHtml += `
-          <div class="eco-plugin-card">
+          <div class="eco-plugin-card ${p.enabled ? '' : 'eco-plugin-disabled'}">
             <div class="eco-plugin-header">
               <span class="eco-plugin-name">${escapeHtml(p.name)}</span>
               <span class="eco-plugin-version">v${escapeHtml(p.version)}</span>
+              <span class="eco-plugin-status">${statusText}</span>
             </div>
             <div class="eco-plugin-desc">${escapeHtml(p.description)}</div>
             <div class="eco-plugin-meta">
               <span>${escapeHtml(p.marketplace)}</span>
               <span>${escapeHtml(p.installed_at)}</span>
               ${badges.join("")}
+            </div>
+            <div class="eco-plugin-actions">
+              <button class="eco-plugin-btn" data-action="toggle" data-id="${escapeHtml(p.full_id)}" data-enabled="${p.enabled}">${p.enabled ? '禁用' : '启用'}</button>
+              <button class="eco-plugin-btn" data-action="update" data-id="${escapeHtml(p.full_id)}">更新</button>
+              <button class="eco-plugin-btn eco-plugin-btn-danger" data-action="uninstall" data-id="${escapeHtml(p.full_id)}">卸载</button>
             </div>
           </div>`;
       });
@@ -431,11 +439,35 @@ function renderEcosystem(data) {
       try {
         await invoke("toggle_mcp_server", { tool, serverName: server, enabled: !currentEnabled });
         showToast(`${server} 已${currentEnabled ? '禁用' : '启用'}`);
-        // 刷新数据
         const freshData = await invoke("get_ecosystem");
         renderEcosystem(freshData);
       } catch (e) {
         showToast("操作失败: " + e);
+      }
+    });
+  });
+
+  // 插件管理按钮事件
+  ecoPanel.querySelectorAll(".eco-plugin-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const action = btn.dataset.action;
+      const pluginId = btn.dataset.id;
+      try {
+        let msg = "";
+        if (action === "toggle") {
+          const currentEnabled = btn.dataset.enabled === "true";
+          msg = await invoke("plugin_toggle", { pluginId, enabled: !currentEnabled });
+        } else if (action === "update") {
+          showToast(`正在更新 ${pluginId}...`);
+          msg = await invoke("plugin_update", { pluginId });
+        } else if (action === "uninstall") {
+          msg = await invoke("plugin_uninstall", { pluginId });
+        }
+        showToast(msg);
+        const freshData = await invoke("get_ecosystem");
+        renderEcosystem(freshData);
+      } catch (e) {
+        showToast(String(e));
       }
     });
   });

@@ -662,6 +662,53 @@ pub fn toggle_mcp_server(tool: String, server_name: String, enabled: bool) -> Re
 }
 
 // ============================================================
+// 插件管理 — 调用 claude plugins CLI
+// ============================================================
+
+#[tauri::command]
+pub fn plugin_toggle(plugin_id: String, enabled: bool) -> Result<String, String> {
+    let action = if enabled { "enable" } else { "disable" };
+    let output = silent_command("claude")
+        .args(["plugins", action, &plugin_id])
+        .output()
+        .map_err(|e| format!("执行失败: {}", e))?;
+    if output.status.success() {
+        Ok(format!("{} 已{}", plugin_id, if enabled { "启用" } else { "禁用" }))
+    } else {
+        let err = String::from_utf8_lossy(&output.stderr).to_string();
+        Err(format!("操作失败: {}", err))
+    }
+}
+
+#[tauri::command]
+pub fn plugin_uninstall(plugin_id: String) -> Result<String, String> {
+    let output = silent_command("claude")
+        .args(["plugins", "uninstall", &plugin_id])
+        .output()
+        .map_err(|e| format!("执行失败: {}", e))?;
+    if output.status.success() {
+        Ok(format!("{} 已卸载", plugin_id))
+    } else {
+        let err = String::from_utf8_lossy(&output.stderr).to_string();
+        Err(format!("卸载失败: {}", err))
+    }
+}
+
+#[tauri::command]
+pub fn plugin_update(plugin_id: String) -> Result<String, String> {
+    let output = silent_command("claude")
+        .args(["plugins", "update", &plugin_id])
+        .output()
+        .map_err(|e| format!("执行失败: {}", e))?;
+    if output.status.success() {
+        Ok(format!("{} 已更新", plugin_id))
+    } else {
+        let err = String::from_utf8_lossy(&output.stderr).to_string();
+        Err(format!("更新失败: {}", err))
+    }
+}
+
+// ============================================================
 // Feature 8: 开机自启（跨平台）
 // ============================================================
 

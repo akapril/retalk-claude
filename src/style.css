@@ -964,3 +964,45 @@ html, body {
   background: rgba(34, 197, 94, 0.2);
   color: #22c55e;
 }
+
+.eco-plugin-disabled {
+  opacity: 0.5;
+}
+
+.eco-plugin-status {
+  font-size: 10px;
+  margin-left: auto;
+  color: var(--text-dim);
+}
+
+.eco-plugin-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.eco-plugin-btn {
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-size: 10px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--bg-item);
+  color: var(--text);
+  font-family: inherit;
+}
+
+.eco-plugin-btn:hover {
+  background: var(--bg-item-hover);
+}
+
+.eco-plugin-btn-danger {
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.eco-plugin-btn-danger:hover {
+  background: rgba(239, 68, 68, 0.15);
+}

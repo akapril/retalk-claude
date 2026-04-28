@@ -22,6 +22,9 @@ pub struct PluginInfo {
     pub has_skills: bool,
     pub has_mcp: bool,
     pub skill_count: u32,
+    pub enabled: bool,
+    /// 完整标识符: name@marketplace
+    pub full_id: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -563,11 +566,19 @@ fn scan_claude_plugins() -> Vec<PluginInfo> {
         Err(_) => return Vec::new(),
     };
 
+    // 读取 enabled 状态: ~/.claude/settings.json -> enabledPlugins
+    let settings_path = home.join(".claude").join("settings.json");
+    let enabled_map: std::collections::HashMap<String, bool> = fs::read_to_string(&settings_path)
+        .ok()
+        .and_then(|c| serde_json::from_str::<serde_json::Value>(&c).ok())
+        .and_then(|d| d.get("enabledPlugins").cloned())
+        .and_then(|v| serde_json::from_value(v).ok())
+        .unwrap_or_default();
+
     let mut plugins = Vec::new();
 
     if let Some(plugin_map) = data.get("plugins").and_then(|v| v.as_object()) {
         for (key, installs) in plugin_map {
-            // key 格式: "plugin-name@marketplace"
             let parts: Vec<&str> = key.splitn(2, '@').collect();
             let plugin_name = parts.first().unwrap_or(&"").to_string();
             let marketplace = parts.get(1).unwrap_or(&"").to_string();
@@ -620,17 +631,22 @@ fn scan_claude_plugins() -> Vec<PluginInfo> {
                         0
                     };
 
+                    let full_id = key.clone();
+                    let enabled = enabled_map.get(&full_id).copied().unwrap_or(true);
+
                     plugins.push(PluginInfo {
                         name: plugin_name.clone(),
                         marketplace: marketplace.clone(),
                         version,
                         description,
                         scope,
-                        installed_at: installed_at.chars().take(10).collect(), // 只取日期部分
+                        installed_at: installed_at.chars().take(10).collect(),
                         install_path,
                         has_skills,
                         has_mcp,
                         skill_count,
+                        enabled,
+                        full_id,
                     });
                 }
             }

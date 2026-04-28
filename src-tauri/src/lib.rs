@@ -191,6 +191,9 @@ pub fn run() {
             commands::get_all_notes,
             commands::get_ecosystem,
             commands::toggle_mcp_server,
+            commands::plugin_toggle,
+            commands::plugin_uninstall,
+            commands::plugin_update,
         ])
         .run(tauri::generate_context!())
         .expect("启动 retalk 失败");
