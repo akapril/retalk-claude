@@ -1,5 +1,7 @@
 # retalk
 
+[English](README_EN.md) | 中文
+
 快速、轻量的 AI 编码助手会话管理器，Spotlight 风格，常驻系统托盘。
 
 一个快捷键，即可搜索、浏览和恢复你在 Claude Code、Codex、Gemini CLI、OpenCode、Kilo Code 中的所有对话。
