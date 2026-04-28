@@ -343,6 +343,26 @@ html, body {
   border-color: var(--text-highlight);
 }
 
+.hotkey-input {
+  cursor: pointer;
+  text-align: center;
+}
+
+.hotkey-input:focus {
+  border-color: var(--text-highlight);
+  box-shadow: 0 0 0 2px rgba(74, 144, 217, 0.2);
+}
+
+.hotkey-input.recording {
+  color: var(--text-highlight);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
 .settings-input {
   width: 140px;
   text-align: right;

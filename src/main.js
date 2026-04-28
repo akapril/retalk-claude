@@ -149,6 +149,7 @@ async function openSettings() {
   try {
     const config = await invoke("get_config");
     document.getElementById("cfg-hotkey").value = config.general.hotkey;
+    document.getElementById("cfg-hotkey").dataset.lastValue = config.general.hotkey;
     document.getElementById("cfg-terminal").value = config.terminal.preferred;
     document.getElementById("cfg-watcher").checked = config.update.watcher_enabled;
     document.getElementById("cfg-poll").checked = config.update.poll_enabled;
@@ -1241,6 +1242,56 @@ document.getElementById("auto-tag-btn").addEventListener("click", async () => {
   } catch (e) {
     showToast("自动标签失败: " + e);
   }
+});
+
+// === 快捷键录制 ===
+const hotkeyInput = document.getElementById("cfg-hotkey");
+
+hotkeyInput.addEventListener("focus", () => {
+  hotkeyInput.classList.add("recording");
+  hotkeyInput.value = "请按下快捷键...";
+});
+
+hotkeyInput.addEventListener("blur", () => {
+  hotkeyInput.classList.remove("recording");
+  // 如果没有录到有效快捷键，恢复旧值
+  if (hotkeyInput.value === "请按下快捷键...") {
+    hotkeyInput.value = hotkeyInput.dataset.lastValue || "Ctrl+Shift+C";
+  }
+});
+
+hotkeyInput.addEventListener("keydown", (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+
+  // 忽略单独的修饰键
+  if (["Control", "Shift", "Alt", "Meta"].includes(e.key)) return;
+
+  const parts = [];
+  if (e.ctrlKey) parts.push("Ctrl");
+  if (e.shiftKey) parts.push("Shift");
+  if (e.altKey) parts.push("Alt");
+
+  // 至少需要一个修饰键
+  if (parts.length === 0) {
+    showToast("快捷键需要至少一个修饰键（Ctrl/Shift/Alt）");
+    return;
+  }
+
+  // 标准化按键名
+  let key = e.key;
+  if (key === " ") key = "Space";
+  else if (key.length === 1) key = key.toUpperCase();
+  else if (key.startsWith("Arrow")) key = key; // ArrowUp 等保持原样
+
+  parts.push(key);
+  const combo = parts.join("+");
+
+  hotkeyInput.value = combo;
+  hotkeyInput.dataset.lastValue = combo;
+  hotkeyInput.classList.remove("recording");
+  hotkeyInput.blur();
+  showToast("快捷键已设置: " + combo);
 });
 
 // 窗口可见时刷新
