@@ -17,9 +17,6 @@ let contextSession = null; // Feature 4: 右键菜单关联的会话
 
 const searchInput = document.getElementById("search-input");
 const sessionList = document.getElementById("session-list");
-const viewModeSelect = document.getElementById("view-mode");
-const sortModeSelect = document.getElementById("sort-mode");
-const providerFilterSelect = document.getElementById("provider-filter");
 const settingsBtn = document.getElementById("settings-btn");
 const settingsPanel = document.getElementById("settings-panel");
 const previewPanel = document.getElementById("preview-panel");
@@ -27,16 +24,87 @@ const previewMessages = document.getElementById("preview-messages");
 const contextMenu = document.getElementById("context-menu");
 const statsBtn = document.getElementById("stats-btn");
 const statsPanel = document.getElementById("stats-panel");
+const ddProvider = document.getElementById("dd-provider");
+const ddView = document.getElementById("dd-view");
+const ddSort = document.getElementById("dd-sort");
 const appWindow = getCurrentWindow();
 
 let settingsOpen = false;
 
-async function init() {
-  // 恢复下拉选择状态
-  viewModeSelect.value = viewMode;
-  sortModeSelect.value = sortMode;
-  providerFilterSelect.value = providerFilter;
+// === 自定义图标下拉菜单 ===
+function setupDropdown(container, currentValue, onChange) {
+  const btn = container.querySelector(".icon-btn");
+  const menu = container.querySelector(".icon-dropdown-menu");
 
+  // 恢复 active 状态
+  menu.querySelectorAll(".dd-item").forEach((item) => {
+    item.classList.toggle("active", item.dataset.value === currentValue);
+  });
+
+  // 点击按钮切换菜单
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    // 关闭其他下拉
+    document.querySelectorAll(".icon-dropdown.open").forEach((d) => {
+      if (d !== container) d.classList.remove("open");
+    });
+    container.classList.toggle("open");
+  });
+
+  // 选择选项
+  menu.querySelectorAll(".dd-item").forEach((item) => {
+    item.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const val = item.dataset.value;
+      menu.querySelectorAll(".dd-item").forEach((i) => i.classList.remove("active"));
+      item.classList.add("active");
+      container.classList.remove("open");
+      onChange(val);
+    });
+  });
+}
+
+// 点击外部关闭所有下拉
+document.addEventListener("click", () => {
+  document.querySelectorAll(".icon-dropdown.open").forEach((d) => d.classList.remove("open"));
+});
+
+// 图标映射：值 -> 按钮显示的图标
+const providerIcons = { all: "\u{1F310}", claude: "\u25C6", codex: "\u25CF", gemini: "\u2605", continue: "\u25B6" };
+const viewIcons = { project: "\u{1F4C1}", timeline: "\u{1F554}" };
+const sortIcons = { time: "\u{1F554}", name: "\u{24B6}" };
+
+function updateBtnIcon(container, iconMap, value) {
+  const btn = container.querySelector(".icon-btn");
+  if (iconMap[value]) btn.textContent = iconMap[value];
+}
+
+setupDropdown(ddProvider, providerFilter, (val) => {
+  providerFilter = val;
+  localStorage.setItem("retalk_providerFilter", providerFilter);
+  updateBtnIcon(ddProvider, providerIcons, val);
+  selectedIndex = 0;
+  render();
+});
+updateBtnIcon(ddProvider, providerIcons, providerFilter);
+
+setupDropdown(ddView, viewMode, (val) => {
+  viewMode = val;
+  localStorage.setItem("retalk_viewMode", viewMode);
+  updateBtnIcon(ddView, viewIcons, val);
+  render();
+});
+updateBtnIcon(ddView, viewIcons, viewMode);
+
+setupDropdown(ddSort, sortMode, (val) => {
+  sortMode = val;
+  localStorage.setItem("retalk_sortMode", sortMode);
+  updateBtnIcon(ddSort, sortIcons, val);
+  render();
+});
+updateBtnIcon(ddSort, sortIcons, sortMode);
+
+async function init() {
   // 加载收藏和标签
   try {
     favorites = await invoke("get_favorites");
@@ -620,24 +688,7 @@ searchInput.addEventListener("input", () => {
   searchTimer = setTimeout(loadSessions, 150);
 });
 
-viewModeSelect.addEventListener("change", () => {
-  viewMode = viewModeSelect.value;
-  localStorage.setItem("retalk_viewMode", viewMode);
-  render();
-});
-
-sortModeSelect.addEventListener("change", () => {
-  sortMode = sortModeSelect.value;
-  localStorage.setItem("retalk_sortMode", sortMode);
-  render();
-});
-
-providerFilterSelect.addEventListener("change", () => {
-  providerFilter = providerFilterSelect.value;
-  localStorage.setItem("retalk_providerFilter", providerFilter);
-  selectedIndex = 0;
-  render();
-});
+// 下拉选择已通过 setupDropdown 处理
 
 document.addEventListener("keydown", async (e) => {
   // 在输入框中不拦截方向键（标签输入框和搜索框均跳过）

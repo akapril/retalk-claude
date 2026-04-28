@@ -57,15 +57,54 @@ html, body {
   color: var(--text-dim);
 }
 
-#provider-filter, #view-mode, #sort-mode {
-  background: var(--bg-item);
+/* 工具栏图标组 */
+.toolbar-icons {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+/* 图标下拉容器 */
+.icon-dropdown {
+  position: relative;
+}
+
+.icon-dropdown-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 130px;
+  background: rgba(40, 40, 40, 0.98);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text);
-  padding: 4px 8px;
+  border-radius: 8px;
+  padding: 4px 0;
+  z-index: 900;
+  backdrop-filter: blur(16px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+}
+
+.icon-dropdown.open .icon-dropdown-menu {
+  display: block;
+}
+
+.dd-item {
+  padding: 6px 12px;
   font-size: 12px;
   cursor: pointer;
-  outline: none;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.dd-item:hover {
+  background: var(--bg-item-hover);
+  color: var(--text);
+}
+
+.dd-item.active {
+  color: var(--text-highlight);
+  font-weight: 600;
 }
 
 .session-list {
@@ -193,21 +232,27 @@ html, body {
   font-size: 14px;
 }
 
-/* 齿轮按钮 */
+/* 工具栏图标按钮 */
 .icon-btn {
   background: transparent;
   border: none;
   color: var(--text-dim);
-  font-size: 16px;
+  font-size: 15px;
   cursor: pointer;
-  padding: 2px 4px;
-  border-radius: 4px;
+  padding: 4px 6px;
+  border-radius: 6px;
   line-height: 1;
+  transition: color 0.15s, background 0.15s;
 }
 
 .icon-btn:hover {
   color: var(--text);
   background: var(--bg-item-hover);
+}
+
+.icon-dropdown.open > .icon-btn {
+  color: var(--text-highlight);
+  background: var(--bg-item);
 }
 
 /* 设置面板 */

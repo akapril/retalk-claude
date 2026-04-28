@@ -16,23 +16,34 @@
         autocomplete="off"
         spellcheck="false"
       />
-      <select id="provider-filter">
-        <option value="all">全部工具</option>
-        <option value="claude">Claude</option>
-        <option value="codex">Codex</option>
-        <option value="gemini">Gemini</option>
-        <option value="continue">Continue</option>
-      </select>
-      <select id="view-mode">
-        <option value="project">按项目</option>
-        <option value="timeline">时间线</option>
-      </select>
-      <select id="sort-mode">
-        <option value="time">按时间</option>
-        <option value="name">按名称</option>
-      </select>
-      <button id="stats-btn" class="icon-btn" title="统计">&#128202;</button>
-      <button id="settings-btn" class="icon-btn" title="设置">&#9881;</button>
+      <div class="toolbar-icons">
+        <div class="icon-dropdown" id="dd-provider">
+          <button class="icon-btn" title="工具筛选">&#9881;</button>
+          <div class="icon-dropdown-menu">
+            <div class="dd-item active" data-value="all">&#127760; 全部工具</div>
+            <div class="dd-item" data-value="claude">&#9670; Claude</div>
+            <div class="dd-item" data-value="codex">&#9679; Codex</div>
+            <div class="dd-item" data-value="gemini">&#9733; Gemini</div>
+            <div class="dd-item" data-value="continue">&#9654; Continue</div>
+          </div>
+        </div>
+        <div class="icon-dropdown" id="dd-view">
+          <button class="icon-btn" title="视图模式">&#9776;</button>
+          <div class="icon-dropdown-menu">
+            <div class="dd-item active" data-value="project">&#128193; 按项目</div>
+            <div class="dd-item" data-value="timeline">&#128340; 时间线</div>
+          </div>
+        </div>
+        <div class="icon-dropdown" id="dd-sort">
+          <button class="icon-btn" title="排序方式">&#8693;</button>
+          <div class="icon-dropdown-menu">
+            <div class="dd-item active" data-value="time">&#128340; 按时间</div>
+            <div class="dd-item" data-value="name">&#9398; 按名称</div>
+          </div>
+        </div>
+        <button id="stats-btn" class="icon-btn" title="统计">&#128202;</button>
+        <button id="settings-btn" class="icon-btn" title="设置">&#9881;</button>
+      </div>
     </div>
     <div id="session-list" class="session-list"></div>
     <div id="preview-panel" class="preview-panel" style="display:none">
