@@ -308,6 +308,16 @@ pub fn open_in_explorer(project_path: String) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+/// 在文件管理器中打开并选中指定文件
+#[tauri::command]
+pub fn open_in_explorer_select(file_path: String) -> Result<(), String> {
+    Command::new("explorer")
+        .args(["/select,", &file_path])
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
 // ============================================================
 // Feature 6: 会话标签系统
 // ============================================================

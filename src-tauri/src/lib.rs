@@ -144,6 +144,7 @@ pub fn run() {
             commands::export_session_markdown,
             commands::export_session_to_file,
             commands::get_desktop_path,
+            commands::open_in_explorer_select,
         ])
         .run(tauri::generate_context!())
         .expect("启动 retalk 失败");

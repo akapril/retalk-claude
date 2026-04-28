@@ -628,7 +628,11 @@ contextMenu.querySelectorAll(".ctx-item").forEach((item) => {
           const fileName = `${s.project_name}_${s.session_id.slice(0, 8)}.md`;
           const filePath = `${desktop}\\${fileName}`;
           await invoke("export_session_to_file", { sessionId: s.session_id, filePath });
-          showToast("已保存到 " + fileName);
+          showToast("已保存到桌面: " + fileName);
+          // 用资源管理器打开并选中文件
+          try {
+            await invoke("open_in_explorer_select", { filePath });
+          } catch (_) {}
         } catch (e) {
           showToast("导出失败: " + e);
         }
