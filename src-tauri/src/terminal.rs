@@ -43,7 +43,7 @@ fn auto_detect() -> TerminalKind {
 pub fn build_resume_command(provider: &str, project_path: &str, session_id: &str) -> String {
     let resume_cmd = match provider {
         "claude" => format!("claude --resume {}", session_id),
-        "codex" => format!("codex --resume {}", session_id),
+        "codex" => format!("codex resume {}", session_id),
         _ => String::new(),
     };
     if resume_cmd.is_empty() {
@@ -68,7 +68,7 @@ pub fn resume_in_terminal(
     // 根据 provider 生成工具恢复命令（不含 cd）
     let tool_cmd = match provider {
         "claude" => format!("claude --resume {}", session_id),
-        "codex" => format!("codex --resume {}", session_id),
+        "codex" => format!("codex resume {}", session_id),
         _ => String::new(),
     };
 
