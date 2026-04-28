@@ -63,7 +63,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tauriScript: npx tauri
           tagName: ${{ github.ref_name }}
           releaseName: 'retalk ${{ github.ref_name }}'
           releaseBody: |
