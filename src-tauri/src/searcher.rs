@@ -52,24 +52,33 @@ pub fn search(
     extract_results(&searcher, schema, &top_docs)
 }
 
-/// 列出所有会话（按更新时间降序排列）
+/// 列出会话（按更新时间降序），可按 provider 过滤
 pub fn list_all(
     index: &SessionIndex,
     max_results: usize,
+    provider_filter: Option<&str>,
 ) -> Vec<SearchResult> {
     let searcher = index.reader().searcher();
     let schema = index.schema();
 
-    // order_by_fast_field 接受字段名字符串，返回 Vec<(tantivy::DateTime, DocAddress)>
+    // 构造查询：全部 或 按 provider 过滤
+    let query: Box<dyn tantivy::query::Query> = match provider_filter {
+        Some(provider) => {
+            let provider_field = schema.get_field("provider").unwrap();
+            let term = tantivy::Term::from_field_text(provider_field, provider);
+            Box::new(tantivy::query::TermQuery::new(term, tantivy::schema::IndexRecordOption::Basic))
+        }
+        None => Box::new(AllQuery),
+    };
+
     let collector = TopDocs::with_limit(max_results)
         .order_by_fast_field::<tantivy::DateTime>("updated_at", Order::Desc);
 
-    let top_docs = match searcher.search(&AllQuery, &collector) {
+    let top_docs = match searcher.search(&*query, &collector) {
         Ok(docs) => docs,
         Err(_) => return Vec::new(),
     };
 
-    // order_by_fast_field 返回 (tantivy::DateTime, DocAddress)，映射为 (f32, DocAddress) 以复用 extract_results
     let results: Vec<(f32, tantivy::DocAddress)> = top_docs
         .into_iter()
         .map(|(_date, addr)| (0.0f32, addr))

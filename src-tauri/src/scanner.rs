@@ -8,6 +8,7 @@ pub fn scan_all_sessions() -> Vec<Session> {
 
     for provider in providers::all_providers() {
         let mut sessions = provider.scan_all();
+        eprintln!("[retalk] provider '{}': {} sessions", provider.name(), sessions.len());
         all_sessions.append(&mut sessions);
     }
 

@@ -73,7 +73,7 @@ setupDropdown(ddProvider, providerFilter, (val) => {
   providerFilter = val;
   localStorage.setItem("retalk_providerFilter", providerFilter);
   selectedIndex = 0;
-  render();
+  loadSessions(); // 重新从后端查询，按 provider 过滤
 });
 
 setupDropdown(ddView, viewMode, (val) => {
@@ -273,7 +273,7 @@ async function loadSessions() {
     if (currentQuery.trim()) {
       sessions = await invoke("search", { query: currentQuery });
     } else {
-      sessions = await invoke("list_sessions");
+      sessions = await invoke("list_sessions", { providerFilter });
     }
     selectedIndex = 0;
     render();
