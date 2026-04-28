@@ -133,10 +133,11 @@ fn parse_history(path: &Path) -> HashMap<String, String> {
 }
 
 /// 解析单个 session JSONL 文件
+/// fallback_path 是从 history_map 或 decode 推断的路径，session 文件内的 cwd 优先
 fn parse_session_file(
     path: &Path,
     session_id: &str,
-    project_path: &str,
+    fallback_path: &str,
 ) -> Option<Session> {
     let file = File::open(path).ok()?;
     let reader = BufReader::new(file);
@@ -146,6 +147,7 @@ fn parse_session_file(
     let mut last_timestamp: Option<DateTime<Utc>> = None;
     let mut message_count: u32 = 0;
     let mut total_tokens: u64 = 0;
+    let mut cwd_from_file: Option<String> = None;
 
     for line in reader.lines() {
         let line = match line {
@@ -153,7 +155,7 @@ fn parse_session_file(
             Err(_) => continue,
         };
 
-        // 先尝试作为通用 JSON 解析以提取 token 信息
+        // 先尝试作为通用 JSON 解析以提取 token 和 cwd 信息
         if let Ok(raw) = serde_json::from_str::<serde_json::Value>(&line) {
             // 提取 assistant 消息中的 usage 信息
             if raw.get("type").and_then(|v| v.as_str()) == Some("assistant") {
@@ -161,6 +163,14 @@ fn parse_session_file(
                     let input = usage.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
                     let output = usage.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
                     total_tokens += input + output;
+                }
+            }
+            // 从 user 消息的 cwd 字段获取真实项目路径（最可靠）
+            if cwd_from_file.is_none() {
+                if let Some(cwd) = raw.get("cwd").and_then(|v| v.as_str()) {
+                    if !cwd.is_empty() {
+                        cwd_from_file = Some(cwd.to_string());
+                    }
                 }
             }
         }
@@ -202,7 +212,13 @@ fn parse_session_file(
         return None;
     }
 
-    let project_name = Path::new(project_path)
+    // cwd 优先，fallback_path 兜底
+    let project_path = cwd_from_file
+        .as_deref()
+        .unwrap_or(fallback_path)
+        .to_string();
+
+    let project_name = Path::new(&project_path)
         .file_name()
         .unwrap_or_default()
         .to_string_lossy()
@@ -211,7 +227,7 @@ fn parse_session_file(
     Some(Session {
         session_id: session_id.to_string(),
         provider: "claude".to_string(),
-        project_path: project_path.to_string(),
+        project_path,
         project_name,
         first_prompt: user_messages.first().cloned().unwrap_or_default(),
         last_prompt: user_messages.last().cloned().unwrap_or_default(),
