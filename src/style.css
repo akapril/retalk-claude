@@ -880,6 +880,14 @@ html, body {
 .eco-tab { padding: 6px 14px; font-size: 12px; cursor: pointer; color: var(--text-dim); border-bottom: 2px solid transparent; background: none; border-top: none; border-left: none; border-right: none; font-family: inherit; }
 .eco-tab:hover { color: var(--text); }
 .eco-tab.active { color: var(--text-highlight); border-bottom-color: var(--text-highlight); }
+
+/* 插件二级导航 */
+.eco-sub-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 8px; }
+.eco-sub-tabs { display: flex; gap: 0; background: var(--bg-item); border-radius: 6px; padding: 2px; }
+.eco-sub-tab { padding: 4px 10px; font-size: 11px; cursor: pointer; color: var(--text-dim); background: transparent; border: none; border-radius: 4px; font-family: inherit; transition: all 0.15s; }
+.eco-sub-tab:hover { color: var(--text); }
+.eco-sub-tab.active { color: var(--text); background: rgba(255, 255, 255, 0.1); }
+
 .eco-tool-group { margin-bottom: 14px; }
 .eco-tool-name { font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
 .eco-item { display: flex; justify-content: space-between; align-items: center; padding: 5px 8px; border-radius: 4px; font-size: 12px; margin-bottom: 2px; }

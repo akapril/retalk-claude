@@ -18,6 +18,8 @@ let contextSession = null; // Feature 4: 右键菜单关联的会话
 let compareOpen = false;   // Feature 5(会话对比): 对比视图状态
 let ecoOpen = false;       // 生态面板状态
 let ecoTab = "plugins";    // 生态面板当前标签: "plugins" | "skills" | "mcp" | "configs"
+let pluginTool = "claude"; // 插件子标签: "claude" | "gemini"
+let pluginView = "installed"; // 插件视图: "installed" | "available"
 let multiSelectMode = false; // Feature 6(批量操作): 多选模式
 let multiSelected = new Set(); // Feature 6: 已选会话 ID 集合
 let providerStatus = [];   // Feature 1(空状态引导): provider 可用状态
@@ -319,87 +321,100 @@ function renderEcosystem(data) {
   let contentHtml = "";
 
   if (ecoTab === "plugins") {
-    if (data.plugins.length === 0 && data.available_plugins.length === 0) {
-      contentHtml = '<div class="eco-empty">未检测到已安装插件</div>';
-    } else {
-      // 已安装插件
-      if (data.plugins.length > 0) {
-        contentHtml += `<div class="eco-tool-name">已安装 (${data.plugins.length})</div>`;
-        data.plugins.forEach(p => {
-          const badges = [];
-          if (p.has_skills) badges.push(`<span class="eco-badge eco-badge-skill">${p.skill_count} skills</span>`);
-          if (p.has_mcp) badges.push('<span class="eco-badge eco-badge-mcp">MCP</span>');
-          const statusText = p.enabled ? "已启用" : "已禁用";
-          contentHtml += `
-            <div class="eco-plugin-card ${p.enabled ? '' : 'eco-plugin-disabled'}">
-              <div class="eco-plugin-header">
-                <span class="eco-plugin-name">${escapeHtml(p.name)}</span>
-                <span class="eco-plugin-version">v${escapeHtml(p.version)}</span>
-                <span class="eco-plugin-status">${statusText}</span>
-              </div>
-              <div class="eco-plugin-desc">${escapeHtml(p.description)}</div>
-              <div class="eco-plugin-meta">
-                <span>${escapeHtml(p.marketplace)}</span>
-                <span>${escapeHtml(p.installed_at)}</span>
-                ${badges.join("")}
-              </div>
-              <div class="eco-plugin-actions">
-                <button class="eco-plugin-btn" data-action="toggle" data-id="${escapeHtml(p.full_id)}" data-enabled="${p.enabled}">${p.enabled ? '禁用' : '启用'}</button>
-                <button class="eco-plugin-btn" data-action="update" data-id="${escapeHtml(p.full_id)}">更新</button>
-                <button class="eco-plugin-btn eco-plugin-btn-danger" data-action="uninstall" data-id="${escapeHtml(p.full_id)}">卸载</button>
-              </div>
-            </div>`;
-        });
-      }
-
-      // 可安装插件
-      if (data.available_plugins.length > 0) {
-        contentHtml += `<div class="eco-tool-name" style="margin-top:16px">可安装 (${data.available_plugins.length})</div>`;
-        data.available_plugins.forEach(p => {
-          contentHtml += `
-            <div class="eco-plugin-card eco-plugin-available">
-              <div class="eco-plugin-header">
-                <span class="eco-plugin-name">${escapeHtml(p.name)}</span>
-              </div>
-              <div class="eco-plugin-desc">${escapeHtml(p.description)}</div>
-              <div class="eco-plugin-actions">
-                <span class="eco-item-meta">${escapeHtml(p.marketplace)}</span>
-                <button class="eco-plugin-btn eco-plugin-btn-install" data-action="install" data-id="${escapeHtml(p.full_id)}">安装</button>
-              </div>
-            </div>`;
-        });
-      }
-
-      // Gemini 扩展管理
-      contentHtml += `<div class="eco-tool-name" style="margin-top:16px">Gemini 扩展${data.extensions.length > 0 ? ' (' + data.extensions.length + ')' : ''}</div>`;
-      // 已安装的 Gemini 扩展
-      if (data.extensions.length > 0) {
-        data.extensions.forEach(ext => {
-          contentHtml += `
-            <div class="eco-plugin-card">
-              <div class="eco-plugin-header">
-                <span class="eco-plugin-name">${escapeHtml(ext.name)}</span>
-                <span class="eco-plugin-status">${ext.enabled ? '已启用' : '已禁用'}</span>
-              </div>
-              <div class="eco-plugin-desc">${escapeHtml(ext.description)}</div>
-              <div class="eco-plugin-actions">
-                <button class="eco-plugin-btn" data-action="gemini-ext-toggle" data-name="${escapeHtml(ext.name)}" data-enabled="${ext.enabled}">${ext.enabled ? '禁用' : '启用'}</button>
-                <button class="eco-plugin-btn eco-plugin-btn-danger" data-action="gemini-ext-uninstall" data-name="${escapeHtml(ext.name)}">卸载</button>
-              </div>
-            </div>`;
-        });
-      }
-      // 安装新 Gemini 扩展
-      contentHtml += `
-        <div class="eco-add-form" id="gemini-ext-form" style="display:none">
-          <input class="eco-add-input eco-add-input-wide" id="gemini-ext-source" placeholder="Git 仓库 URL 或本地路径" />
-          <div class="eco-add-actions">
-            <button class="eco-plugin-btn eco-plugin-btn-install" id="gemini-ext-install-btn">安装</button>
-            <button class="eco-plugin-btn" id="gemini-ext-cancel-btn">取消</button>
-          </div>
+    // 二级导航：工具切换 + 已安装/可安装切换
+    contentHtml += `
+      <div class="eco-sub-nav">
+        <div class="eco-sub-tabs">
+          <button class="eco-sub-tab ${pluginTool === 'claude' ? 'active' : ''}" data-ptool="claude">Claude (${data.plugins.length})</button>
+          <button class="eco-sub-tab ${pluginTool === 'gemini' ? 'active' : ''}" data-ptool="gemini">Gemini (${data.extensions.length})</button>
         </div>
-        <button class="eco-add-trigger" id="gemini-ext-trigger">+ 安装 Gemini 扩展</button>
-      `;
+        <div class="eco-sub-tabs">
+          <button class="eco-sub-tab ${pluginView === 'installed' ? 'active' : ''}" data-pview="installed">已安装</button>
+          <button class="eco-sub-tab ${pluginView === 'available' ? 'active' : ''}" data-pview="available">可安装</button>
+        </div>
+      </div>`;
+
+    if (pluginTool === "claude") {
+      if (pluginView === "installed") {
+        if (data.plugins.length === 0) {
+          contentHtml += '<div class="eco-empty">暂无已安装的 Claude 插件</div>';
+        } else {
+          data.plugins.forEach(p => {
+            const badges = [];
+            if (p.has_skills) badges.push(`<span class="eco-badge eco-badge-skill">${p.skill_count} skills</span>`);
+            if (p.has_mcp) badges.push('<span class="eco-badge eco-badge-mcp">MCP</span>');
+            contentHtml += `
+              <div class="eco-plugin-card ${p.enabled ? '' : 'eco-plugin-disabled'}">
+                <div class="eco-plugin-header">
+                  <span class="eco-plugin-name">${escapeHtml(p.name)}</span>
+                  <span class="eco-plugin-version">v${escapeHtml(p.version)}</span>
+                  <span class="eco-plugin-status">${p.enabled ? '已启用' : '已禁用'}</span>
+                </div>
+                <div class="eco-plugin-desc">${escapeHtml(p.description)}</div>
+                <div class="eco-plugin-meta">
+                  <span>${escapeHtml(p.marketplace)}</span>
+                  <span>${escapeHtml(p.installed_at)}</span>
+                  ${badges.join("")}
+                </div>
+                <div class="eco-plugin-actions">
+                  <button class="eco-plugin-btn" data-action="toggle" data-id="${escapeHtml(p.full_id)}" data-enabled="${p.enabled}">${p.enabled ? '禁用' : '启用'}</button>
+                  <button class="eco-plugin-btn" data-action="update" data-id="${escapeHtml(p.full_id)}">更新</button>
+                  <button class="eco-plugin-btn eco-plugin-btn-danger" data-action="uninstall" data-id="${escapeHtml(p.full_id)}">卸载</button>
+                </div>
+              </div>`;
+          });
+        }
+      } else {
+        // 可安装
+        if (data.available_plugins.length === 0) {
+          contentHtml += '<div class="eco-empty">所有插件均已安装</div>';
+        } else {
+          data.available_plugins.forEach(p => {
+            contentHtml += `
+              <div class="eco-plugin-card eco-plugin-available">
+                <div class="eco-plugin-header">
+                  <span class="eco-plugin-name">${escapeHtml(p.name)}</span>
+                </div>
+                <div class="eco-plugin-desc">${escapeHtml(p.description)}</div>
+                <div class="eco-plugin-actions">
+                  <span class="eco-item-meta">${escapeHtml(p.marketplace)}</span>
+                  <button class="eco-plugin-btn eco-plugin-btn-install" data-action="install" data-id="${escapeHtml(p.full_id)}">安装</button>
+                </div>
+              </div>`;
+          });
+        }
+      }
+    } else if (pluginTool === "gemini") {
+      if (pluginView === "installed") {
+        if (data.extensions.length === 0) {
+          contentHtml += '<div class="eco-empty">暂无已安装的 Gemini 扩展</div>';
+        } else {
+          data.extensions.forEach(ext => {
+            contentHtml += `
+              <div class="eco-plugin-card">
+                <div class="eco-plugin-header">
+                  <span class="eco-plugin-name">${escapeHtml(ext.name)}</span>
+                  <span class="eco-plugin-status">${ext.enabled ? '已启用' : '已禁用'}</span>
+                </div>
+                <div class="eco-plugin-desc">${escapeHtml(ext.description)}</div>
+                <div class="eco-plugin-actions">
+                  <button class="eco-plugin-btn" data-action="gemini-ext-toggle" data-name="${escapeHtml(ext.name)}" data-enabled="${ext.enabled}">${ext.enabled ? '禁用' : '启用'}</button>
+                  <button class="eco-plugin-btn eco-plugin-btn-danger" data-action="gemini-ext-uninstall" data-name="${escapeHtml(ext.name)}">卸载</button>
+                </div>
+              </div>`;
+          });
+        }
+      } else {
+        // Gemini 可安装 — 通过 URL 安装
+        contentHtml += `
+          <div class="eco-add-form" id="gemini-ext-form">
+            <input class="eco-add-input eco-add-input-wide" id="gemini-ext-source" placeholder="Git 仓库 URL 或本地路径" />
+            <div class="eco-add-actions">
+              <button class="eco-plugin-btn eco-plugin-btn-install" id="gemini-ext-install-btn">安装</button>
+            </div>
+          </div>
+          <div class="eco-empty">输入 Git 仓库 URL 安装 Gemini 扩展</div>`;
+      }
     }
   } else if (ecoTab === "skills") {
     if (data.skills.length === 0) {
@@ -498,6 +513,21 @@ function renderEcosystem(data) {
   ecoPanel.querySelectorAll(".eco-tab").forEach(tab => {
     tab.addEventListener("click", () => {
       ecoTab = tab.dataset.tab;
+      renderEcosystem(data);
+    });
+  });
+
+  // 插件子导航：工具切换
+  ecoPanel.querySelectorAll(".eco-sub-tab[data-ptool]").forEach(tab => {
+    tab.addEventListener("click", () => {
+      pluginTool = tab.dataset.ptool;
+      renderEcosystem(data);
+    });
+  });
+  // 插件子导航：已安装/可安装切换
+  ecoPanel.querySelectorAll(".eco-sub-tab[data-pview]").forEach(tab => {
+    tab.addEventListener("click", () => {
+      pluginView = tab.dataset.pview;
       renderEcosystem(data);
     });
   });
