@@ -333,7 +333,11 @@ function render() {
 }
 
 function renderTimeline(list) {
-  const sorted = sortSessions(list);
+  // 先按收藏分组，组内再排序，保证收藏始终在顶部
+  const favSet = new Set(favorites);
+  const favItems = sortSessions(list.filter((s) => favSet.has(s.session_id)));
+  const normalItems = sortSessions(list.filter((s) => !favSet.has(s.session_id)));
+  const sorted = [...favItems, ...normalItems];
   sorted.forEach((s, i) => {
     sessionList.appendChild(createSessionItem(s, i));
   });
@@ -358,9 +362,13 @@ function renderGrouped(list) {
     });
   }
 
+  const favSet = new Set(favorites);
   let globalIdx = 0;
   sortedEntries.forEach(([name, items]) => {
-    const sortedItems = sortSessions(items);
+    // 组内：收藏在前，各自按排序模式排
+    const favInGroup = sortSessions(items.filter((s) => favSet.has(s.session_id)));
+    const normalInGroup = sortSessions(items.filter((s) => !favSet.has(s.session_id)));
+    const sortedItems = [...favInGroup, ...normalInGroup];
     const header = document.createElement("div");
     header.className = "group-header";
     header.textContent = `${name} (${sortedItems.length})`;
