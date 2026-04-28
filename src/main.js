@@ -4,9 +4,9 @@ const { getCurrentWindow } = window.__TAURI__.window;
 let sessions = [];
 let selectedIndex = 0;
 let currentQuery = "";
-let viewMode = "project";
-let sortMode = "time"; // "time" | "name"
-let providerFilter = "all"; // "all" | "claude" | "codex" | "gemini" | "continue"
+let viewMode = localStorage.getItem("retalk_viewMode") || "project";
+let sortMode = localStorage.getItem("retalk_sortMode") || "time";
+let providerFilter = localStorage.getItem("retalk_providerFilter") || "all";
 
 // 新功能状态
 let favorites = [];       // Feature 3: 收藏的 session_id 列表
@@ -32,6 +32,11 @@ const appWindow = getCurrentWindow();
 let settingsOpen = false;
 
 async function init() {
+  // 恢复下拉选择状态
+  viewModeSelect.value = viewMode;
+  sortModeSelect.value = sortMode;
+  providerFilterSelect.value = providerFilter;
+
   // 加载收藏和标签
   try {
     favorites = await invoke("get_favorites");
@@ -446,22 +451,33 @@ function updatePreview() {
 
 // ======================== Feature 2: Git 信息 ========================
 
+let gitFetching = false;
 async function fetchGitInfoForVisible() {
-  // 收集不重复的 project_path
-  const paths = [...new Set(sessions.map((s) => s.project_path))];
-  for (const p of paths) {
-    if (gitInfoCache[p]) continue;
-    try {
-      const info = await invoke("get_project_git_info", { projectPath: p });
-      if (info) {
-        gitInfoCache[p] = info;
+  if (gitFetching) return;
+  gitFetching = true;
+
+  // 收集未缓存的 project_path
+  const paths = [...new Set(sessions.map((s) => s.project_path))]
+    .filter((p) => !gitInfoCache[p] && !p.startsWith("gemini:")); // gemini 无真实路径
+
+  // 并行请求（最多 5 个并发）
+  const batchSize = 5;
+  let updated = false;
+  for (let i = 0; i < paths.length; i += batchSize) {
+    const batch = paths.slice(i, i + batchSize);
+    const results = await Promise.allSettled(
+      batch.map((p) => invoke("get_project_git_info", { projectPath: p }).then((info) => ({ p, info })))
+    );
+    for (const r of results) {
+      if (r.status === "fulfilled" && r.value.info) {
+        gitInfoCache[r.value.p] = r.value.info;
+        updated = true;
       }
-    } catch (_) {
-      // 非 git 仓库，忽略
     }
   }
-  // 拿到数据后重新渲染（只更新 git 徽章，不重置选中状态）
-  render();
+
+  gitFetching = false;
+  if (updated) render();
 }
 
 // ======================== Feature 3: 收藏 ========================
@@ -606,25 +622,29 @@ searchInput.addEventListener("input", () => {
 
 viewModeSelect.addEventListener("change", () => {
   viewMode = viewModeSelect.value;
+  localStorage.setItem("retalk_viewMode", viewMode);
   render();
 });
 
 sortModeSelect.addEventListener("change", () => {
   sortMode = sortModeSelect.value;
+  localStorage.setItem("retalk_sortMode", sortMode);
   render();
 });
 
 providerFilterSelect.addEventListener("change", () => {
   providerFilter = providerFilterSelect.value;
+  localStorage.setItem("retalk_providerFilter", providerFilter);
   selectedIndex = 0;
   render();
 });
 
 document.addEventListener("keydown", async (e) => {
-  // 如果在标签输入框中，不处理全局快捷键
+  // 在输入框中不拦截方向键（标签输入框和搜索框均跳过）
   if (e.target.classList.contains("tag-input")) return;
+  const inSearchBox = e.target === searchInput;
 
-  if (e.key === "ArrowDown") {
+  if (e.key === "ArrowDown" && !inSearchBox) {
     e.preventDefault();
     if (selectedIndex < sessions.length - 1) {
       selectedIndex++;
@@ -632,7 +652,7 @@ document.addEventListener("keydown", async (e) => {
       render();
       scrollToSelected();
     }
-  } else if (e.key === "ArrowUp") {
+  } else if (e.key === "ArrowUp" && !inSearchBox) {
     e.preventDefault();
     if (selectedIndex > 0) {
       selectedIndex--;
