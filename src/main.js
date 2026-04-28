@@ -6,11 +6,13 @@ let selectedIndex = 0;
 let currentQuery = "";
 let viewMode = "project";
 let sortMode = "time"; // "time" | "name"
+let providerFilter = "all"; // "all" | "claude" | "codex" | "gemini" | "continue"
 
 const searchInput = document.getElementById("search-input");
 const sessionList = document.getElementById("session-list");
 const viewModeSelect = document.getElementById("view-mode");
 const sortModeSelect = document.getElementById("sort-mode");
+const providerFilterSelect = document.getElementById("provider-filter");
 const settingsBtn = document.getElementById("settings-btn");
 const settingsPanel = document.getElementById("settings-panel");
 const appWindow = getCurrentWindow();
@@ -112,29 +114,36 @@ function sortSessions(list) {
   return [...list].sort((a, b) => b.updated_at.localeCompare(a.updated_at));
 }
 
+/// 按当前 provider 过滤
+function filteredSessions() {
+  if (providerFilter === "all") return sessions;
+  return sessions.filter(s => s.provider === providerFilter);
+}
+
 function render() {
   sessionList.innerHTML = "";
-  if (sessions.length === 0) {
+  const list = filteredSessions();
+  if (list.length === 0) {
     sessionList.innerHTML = '<div class="empty-state">没有找到会话</div>';
     return;
   }
   if (viewMode === "project") {
-    renderGrouped();
+    renderGrouped(list);
   } else {
-    renderTimeline();
+    renderTimeline(list);
   }
 }
 
-function renderTimeline() {
-  const sorted = sortSessions(sessions);
+function renderTimeline(list) {
+  const sorted = sortSessions(list);
   sorted.forEach((s, i) => {
     sessionList.appendChild(createSessionItem(s, i));
   });
 }
 
-function renderGrouped() {
+function renderGrouped(list) {
   const groups = {};
-  sessions.forEach((s) => {
+  list.forEach((s) => {
     const key = s.project_name || "未知项目";
     if (!groups[key]) groups[key] = [];
     groups[key].push(s);
@@ -208,6 +217,12 @@ viewModeSelect.addEventListener("change", () => {
 
 sortModeSelect.addEventListener("change", () => {
   sortMode = sortModeSelect.value;
+  render();
+});
+
+providerFilterSelect.addEventListener("change", () => {
+  providerFilter = providerFilterSelect.value;
+  selectedIndex = 0;
   render();
 });
 

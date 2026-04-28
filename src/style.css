@@ -57,7 +57,7 @@ html, body {
   color: var(--text-dim);
 }
 
-#view-mode, #sort-mode {
+#provider-filter, #view-mode, #sort-mode {
   background: var(--bg-item);
   border: 1px solid var(--border);
   border-radius: 6px;
