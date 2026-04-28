@@ -1,143 +1,144 @@
 # retalk
 
-A fast, Spotlight-style session manager for AI coding CLI tools on Windows.
+快速、轻量的 AI 编码助手会话管理器，Spotlight 风格，常驻系统托盘。
 
-Retalk lives in your system tray and lets you instantly search, browse, and resume conversations across multiple AI coding assistants with a single hotkey.
+一个快捷键，即可搜索、浏览和恢复你在 Claude Code、Codex、Gemini CLI、OpenCode、Kilo Code 中的所有对话。
 
-## Why
+## 为什么需要
 
-When you work with multiple AI coding tools across many projects, finding and resuming the right conversation becomes painful. Retalk solves this by:
+同时使用多个 AI 编码工具、跨多个项目工作时，关闭终端后很难找到之前的对话。retalk 解决这个问题：
 
-- Indexing all your sessions from Claude Code, Codex, Gemini CLI, OpenCode, and Kilo Code
-- Providing instant full-text search with Chinese language support
-- Letting you resume any session in one keystroke
+- 自动索引所有工具的会话数据
+- 全文搜索（支持中文分词）
+- 一键恢复任意会话到终端
 
-## Features
+## 功能
 
-### Core
+### 核心
 
-- **Spotlight-style popup** — `Ctrl+Shift+C` to toggle, `Esc` to dismiss
-- **Full-text search** — Tantivy engine with jieba Chinese segmentation, sub-millisecond queries
-- **Multi-tool support** — 5 providers with session resume
-- **One-click resume** — Opens a new terminal, `cd` to project, runs the resume command
-- **System tray** — Always running, left-click or hotkey to open
+- **Spotlight 弹窗** — `Ctrl+Shift+C` 弹出/隐藏，`Esc` 关闭
+- **全文搜索** — Tantivy 引擎 + jieba 中文分词，亚毫秒级响应
+- **多工具支持** — 5 个 provider，全部支持会话恢复
+- **一键恢复** — 自动打开终端，切换到项目目录，执行恢复命令
+- **系统托盘** — 常驻后台，左键点击或快捷键打开
 
-### Providers
+### 支持的工具
 
-| Provider | Data Format | Resume Command | Status |
-|----------|------------|----------------|--------|
-| Claude Code | JSONL | `claude --resume <id>` | Active |
-| Codex CLI | JSONL | `codex resume <id>` | Active |
-| Gemini CLI | JSON | `gemini --resume <id>` | Active |
-| OpenCode | SQLite | `opencode --session <id>` | Active |
-| Kilo Code | SQLite | `kilo --session <id>` | Active |
+| 工具 | 数据格式 | 恢复命令 |
+|------|---------|---------|
+| Claude Code | JSONL | `claude --resume <id>` |
+| Codex CLI | JSONL | `codex resume <id>` |
+| Gemini CLI | JSON | `gemini --resume <id>` |
+| OpenCode | SQLite | `opencode --session <id>` |
+| Kilo Code | SQLite | `kilo --session <id>` |
 
-### Organization
+### 会话管理
 
-- **Dual view** — By project (grouped) or timeline (chronological)
-- **Time groups** — Today / Yesterday / This Week / This Month / Earlier
-- **Sorting** — By time or by name
-- **Provider filter** — Filter sessions by tool, powered by backend Tantivy queries
-- **Favorites** — Star important sessions, always pinned to top
-- **Tags** — Custom labels per session, searchable. Auto-tagging by keyword detection (bug fix, refactor, new feature, test, deploy, docs)
+- **双视图** — 按项目分组 / 时间线
+- **时间分组** — 今天 / 昨天 / 本周 / 本月 / 更早
+- **排序** — 按时间或按名称
+- **工具筛选** — 按 provider 过滤，后端 Tantivy 查询
+- **收藏置顶** — 星标重要会话，始终在列表顶部
+- **标签系统** — 自定义标签，支持搜索。自动标签识别（bug修复、重构、新功能、测试、部署、文档）
 
-### Productivity
+### 效率工具
 
-- **Session preview** — Arrow keys to navigate, bottom panel shows last 3 messages
-- **Context menu** — Right-click for: resume, open in VS Code, open in Explorer, copy path, copy resume command, export Markdown, compare tools
-- **Session compare** — Side-by-side view of sessions from different tools on the same project
-- **Batch operations** — Ctrl+Click multi-select, batch export to Markdown
-- **Git integration** — Shows current branch and uncommitted changes count per project
-- **Token & cost estimates** — Displays token usage and estimated cost for Claude and Codex sessions
+- **会话预览** — 方向键导航，底部面板显示最近 3 条消息
+- **右键菜单** — 恢复 / 在 VS Code 中打开 / 在文件管理器中打开 / 复制路径 / 复制恢复命令 / 导出 Markdown / 对比工具
+- **会话对比** — 同一个项目在不同工具中的会话并排对比
+- **批量操作** — Ctrl+Click 多选，批量导出 Markdown
+- **Git 集成** — 显示当前分支和未提交变更数
+- **Token 估算** — 显示 Claude 和 Codex 会话的 token 用量和预估费用
+- **导出** — 导出 Markdown 到剪贴板或文件（自动打开文件管理器定位）
 
-### Settings
+### 设置
 
-- **Global hotkey** — Press-to-capture key binding
-- **Terminal preference** — Auto-detect, Windows Terminal, PowerShell, or CMD
-- **Update strategies** — File watcher, polling (configurable interval), on-demand refresh. All with performance stats
-- **Auto-start** — Windows startup via registry
-- **Rebuild index** — One-click full re-index from settings
-- **Max results** — Configurable query limit
+- **全局快捷键** — 按键捕获式设置，点击输入框后按下组合键自动录入
+- **终端偏好** — 自动检测 / Windows Terminal / PowerShell / CMD
+- **更新策略** — 文件监听、定时轮询（可配置间隔）、按需刷新，三种策略带性能统计
+- **开机自启** — Windows 注册表自启动
+- **重建索引** — 设置页一键重建，数据异常时无需手动删文件
+- **最大结果数** — 可配置查询返回上限
 
-### Statistics
+### 使用统计
 
-- Session count per provider
-- Top 5 most active projects (bar chart)
-- Monthly activity (bar chart)
-- Hot projects (activity spike this week)
-- Dormant projects (no activity in 30+ days)
+- 各工具会话数量
+- 最活跃项目 Top 5（柱状图）
+- 月度活跃度（柱状图）
+- 频繁活动项目（本周 vs 上周活跃度对比）
+- 长期未活动项目（30 天以上无会话）
 
-### Performance
+### 性能
 
-- **Instant startup** — Persisted Tantivy index opens from disk, UI available immediately
-- **Incremental sync** — Background thread diffs current sessions against index, only updates changes
-- **Non-blocking** — All heavy work (scanning, indexing, git queries) runs in background threads with `try_lock` to prevent UI freezing
-- **Debounced search** — 150ms input debounce, real-time results
+- **秒开** — 持久化 Tantivy 索引从磁盘加载，UI 立即可用
+- **增量同步** — 后台线程对比索引与当前数据，只更新变化的部分
+- **不阻塞** — 扫描、索引、Git 查询全部在后台线程，`try_lock` 防止 UI 冻结
+- **搜索防抖** — 150ms 输入防抖，实时响应
 
-## Tech Stack
+## 技术栈
 
-- **Rust** + **Tauri v2** — Native Windows app, ~8MB binary
-- **Tantivy** — Full-text search engine (Rust-native Lucene alternative)
-- **jieba-rs** — Chinese word segmentation
-- **rusqlite** — SQLite reader for OpenCode/Kilo data
-- **notify** — File system watcher for real-time updates
-- **Vanilla HTML/CSS/JS** — No frontend framework, minimal overhead
+- **Rust** + **Tauri v2** — 原生 Windows 应用，约 8MB
+- **Tantivy** — 全文搜索引擎（Rust 原生 Lucene 替代）
+- **jieba-rs** — 中文分词
+- **rusqlite** — 读取 OpenCode/Kilo 的 SQLite 数据
+- **notify** — 文件系统监听，实时更新
+- **原生 HTML/CSS/JS** — 无前端框架，最小开销
 
-## Project Structure
+## 项目结构
 
 ```
 src-tauri/src/
-  main.rs          # Entry point
-  lib.rs           # Tauri setup, tray, hotkey, window management
-  models.rs        # Session, Config, Stats data types
-  config.rs        # ~/.claude/retalk/config.toml read/write
-  scanner.rs       # Aggregates all providers
-  indexer.rs       # Tantivy index management, incremental sync
-  searcher.rs      # Full-text search + filtered listing
-  updater.rs       # Three update strategies with stats
-  terminal.rs      # Terminal detection and session resume
-  commands.rs      # Tauri IPC commands (thin glue layer)
+  main.rs          # 入口
+  lib.rs           # Tauri 初始化、托盘、快捷键、窗口管理
+  models.rs        # Session、Config、Stats 数据结构
+  config.rs        # ~/.claude/retalk/config.toml 读写
+  scanner.rs       # 聚合所有 provider
+  indexer.rs       # Tantivy 索引管理、增量同步
+  searcher.rs      # 全文搜索 + 过滤列表
+  updater.rs       # 三种更新策略及性能统计
+  terminal.rs      # 终端检测与会话恢复
+  commands.rs      # Tauri IPC 命令（薄胶水层）
   providers/
-    mod.rs         # SessionProvider trait + registry
-    claude.rs      # Claude Code JSONL parser
-    codex.rs       # Codex CLI JSONL parser
-    gemini.rs      # Gemini CLI JSON parser
-    opencode.rs    # OpenCode SQLite reader (shared with Kilo)
-    kilo.rs        # Kilo Code SQLite reader
+    mod.rs         # SessionProvider trait + 注册
+    claude.rs      # Claude Code JSONL 解析
+    codex.rs       # Codex CLI JSONL 解析
+    gemini.rs      # Gemini CLI JSON 解析
+    opencode.rs    # OpenCode SQLite 读取（与 Kilo 共用）
+    kilo.rs        # Kilo Code SQLite 读取
 src/
-  index.html       # Spotlight popup layout
-  style.css        # Dark theme, glassmorphism, flat SVG icons
-  main.js          # All frontend logic (vanilla JS)
+  index.html       # Spotlight 弹窗布局
+  style.css        # 暗色主题、毛玻璃效果、扁平 SVG 图标
+  main.js          # 全部前端逻辑（原生 JS）
 ```
 
-## Data Storage
+## 数据存储
 
 ```
 ~/.claude/retalk/
-  config.toml      # User preferences
-  index/           # Tantivy search index (persistent)
-  favorites.json   # Starred session IDs
-  tags.json        # Session tags
+  config.toml      # 用户配置
+  index/           # Tantivy 搜索索引（持久化）
+  favorites.json   # 收藏的会话 ID
+  tags.json        # 会话标签
 ```
 
-## Build
+## 构建
 
-Requirements: Rust 1.77+, Node.js 18+, Windows 11 (WebView2 included)
+环境要求：Rust 1.77+、Node.js 18+、Windows 11（自带 WebView2）
 
 ```bash
-# Install Tauri CLI
+# 安装 Tauri CLI
 npm install -D @tauri-apps/cli@latest
 
-# Development
+# 开发模式
 npx tauri dev
 
-# Release build
+# 构建发布版
 npx tauri build
 ```
 
-## Configuration
+## 配置
 
-Default config at `~/.claude/retalk/config.toml`:
+默认配置位于 `~/.claude/retalk/config.toml`：
 
 ```toml
 [general]
@@ -157,6 +158,6 @@ theme = "dark"
 max_results = 1000
 ```
 
-## License
+## 许可
 
 MIT
