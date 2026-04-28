@@ -1,5 +1,19 @@
 use std::process::Command;
 
+/// 创建隐藏窗口的 Command（Windows 上不闪 cmd 窗口）
+#[cfg(windows)]
+fn silent_command(program: &str) -> Command {
+    use std::os::windows::process::CommandExt;
+    let mut cmd = Command::new(program);
+    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    cmd
+}
+
+#[cfg(not(windows))]
+fn silent_command(program: &str) -> Command {
+    Command::new(program)
+}
+
 /// 支持的终端类型
 #[derive(Debug, Clone)]
 pub enum TerminalKind {
@@ -20,7 +34,7 @@ pub fn detect_terminal(preferred: &str) -> TerminalKind {
 
 /// 自动探测系统可用终端：优先 Windows Terminal > PowerShell > Cmd
 fn auto_detect() -> TerminalKind {
-    if Command::new("where")
+    if silent_command("where")
         .arg("wt.exe")
         .output()
         .map(|o| o.status.success())
@@ -28,7 +42,7 @@ fn auto_detect() -> TerminalKind {
     {
         return TerminalKind::WindowsTerminal;
     }
-    if Command::new("where")
+    if silent_command("where")
         .arg("pwsh.exe")
         .output()
         .map(|o| o.status.success())

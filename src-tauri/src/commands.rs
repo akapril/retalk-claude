@@ -10,6 +10,20 @@ use std::process::Command;
 use std::sync::Arc;
 use tauri::State;
 
+/// 创建隐藏窗口的 Command（Windows 上不闪 cmd 窗口）
+#[cfg(windows)]
+fn silent_command(program: &str) -> Command {
+    use std::os::windows::process::CommandExt;
+    let mut cmd = Command::new(program);
+    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    cmd
+}
+
+#[cfg(not(windows))]
+fn silent_command(program: &str) -> Command {
+    Command::new(program)
+}
+
 /// 应用全局状态
 pub struct AppState {
     pub index: Arc<Mutex<SessionIndex>>,
@@ -38,10 +52,12 @@ pub fn search(
     query: String,
     provider_filter: Option<String>,
 ) -> Vec<SearchResult> {
-    let index = state.index.lock();
     let max = state.config.lock().ui.max_results;
     let filter = provider_filter.as_deref().filter(|p| *p != "all");
-    searcher::search(&index, &query, max, filter)
+    match state.index.try_lock() {
+        Some(index) => searcher::search(&index, &query, max, filter),
+        None => Vec::new(),
+    }
 }
 
 /// 列出会话（按更新时间降序），支持 provider 过滤
@@ -60,11 +76,11 @@ pub fn list_sessions(
     let config = state.config.lock().clone();
 
     // 按需刷新：尝试获取锁，获取不到说明后台正在同步，跳过
-    // 如果检测到变化，在后台线程刷新，不阻塞当前请求
     if let Some(index) = state.index.try_lock() {
         let refreshed = state.updater.on_demand_refresh(&index, &config);
-        drop(index);
         if refreshed {
+            // 检测到变化，后台线程刷新（先释放锁再 spawn）
+            drop(index);
             let bg_index = Arc::clone(&state.index);
             let bg_sessions = Arc::clone(&state.sessions);
             std::thread::spawn(move || {
@@ -72,12 +88,17 @@ pub fn list_sessions(
                 let _ = bg_index.lock().rebuild(&fresh);
                 *bg_sessions.lock() = fresh;
             });
+        } else {
+            drop(index);
         }
     }
 
+    // 用 try_lock 获取索引查询，获取不到则返回空（后台正在更新）
     let filter = provider_filter.as_deref().filter(|p| *p != "all");
-    let index = state.index.lock();
-    searcher::list_all(&index, config.ui.max_results, filter)
+    match state.index.try_lock() {
+        Some(index) => searcher::list_all(&index, config.ui.max_results, filter),
+        None => Vec::new(), // 后台正在更新，前端稍后重试
+    }
 }
 
 /// 在终端中恢复 AI 编码工具会话
@@ -153,7 +174,7 @@ pub fn get_session_preview(
 #[tauri::command]
 pub fn get_project_git_info(project_path: String) -> Option<GitInfo> {
     // 获取当前分支名
-    let branch_output = Command::new("git")
+    let branch_output = silent_command("git")
         .args(["-C", &project_path, "rev-parse", "--abbrev-ref", "HEAD"])
         .output()
         .ok()?;
@@ -165,7 +186,7 @@ pub fn get_project_git_info(project_path: String) -> Option<GitInfo> {
         .to_string();
 
     // 获取未提交变更数
-    let status_output = Command::new("git")
+    let status_output = silent_command("git")
         .args(["-C", &project_path, "status", "--porcelain"])
         .output()
         .ok()?;
@@ -544,7 +565,7 @@ pub fn set_autostart(enabled: bool) -> Result<(), String> {
 
     if enabled {
         // 添加到 HKCU\Software\Microsoft\Windows\CurrentVersion\Run
-        Command::new("reg")
+        silent_command("reg")
             .args([
                 "add",
                 "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
@@ -559,7 +580,7 @@ pub fn set_autostart(enabled: bool) -> Result<(), String> {
             .output()
             .map_err(|e| e.to_string())?;
     } else {
-        Command::new("reg")
+        silent_command("reg")
             .args([
                 "delete",
                 "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
