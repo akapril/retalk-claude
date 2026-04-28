@@ -664,6 +664,56 @@ html, body {
   transform: translateX(-50%) translateY(0);
 }
 
+/* ======================== 会话备注 ======================== */
+.note-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.note-text {
+  font-size: 11px;
+  color: #a0c4e8;
+  font-style: italic;
+}
+
+.note-edit-btn {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0 3px;
+}
+
+.note-edit-btn:hover {
+  color: var(--text);
+}
+
+.note-add {
+  font-style: normal;
+  font-size: 10px;
+  color: var(--text-dim);
+  opacity: 0.5;
+}
+
+.note-add:hover {
+  opacity: 1;
+}
+
+.note-input {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  border: 1px solid var(--text-highlight);
+  outline: none;
+  flex: 1;
+  font-family: inherit;
+}
+
 /* ======================== Feature 5: 会话对比视图 ======================== */
 .compare-view {
   flex: 1;

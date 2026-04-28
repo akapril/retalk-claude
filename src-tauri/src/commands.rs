@@ -35,6 +35,8 @@ pub struct AppState {
     pub favorites: Arc<Mutex<Vec<String>>>,
     /// 会话标签：session_id -> [tag1, tag2, ...]
     pub tags: Arc<Mutex<TagsMap>>,
+    /// 会话备注：session_id -> "备注文本"
+    pub notes: Arc<Mutex<HashMap<String, String>>>,
     /// 后台扫描是否完成
     pub ready: Arc<std::sync::atomic::AtomicBool>,
 }
@@ -411,6 +413,50 @@ pub fn set_tags(
 #[tauri::command]
 pub fn get_all_tags(state: State<AppState>) -> TagsMap {
     state.tags.lock().clone()
+}
+
+// ============================================================
+// 会话备注 — 独立存储，不修改原始对话文件
+// ============================================================
+
+fn notes_path() -> std::path::PathBuf {
+    config::retalk_dir().join("notes.json")
+}
+
+pub fn load_notes() -> HashMap<String, String> {
+    let path = notes_path();
+    if path.exists() {
+        std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|c| serde_json::from_str(&c).ok())
+            .unwrap_or_default()
+    } else {
+        HashMap::new()
+    }
+}
+
+fn save_notes(notes: &HashMap<String, String>) {
+    let path = notes_path();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(&path, serde_json::to_string_pretty(notes).unwrap_or_default());
+}
+
+#[tauri::command]
+pub fn set_note(state: State<AppState>, session_id: String, note: String) {
+    let mut notes = state.notes.lock();
+    if note.trim().is_empty() {
+        notes.remove(&session_id);
+    } else {
+        notes.insert(session_id, note);
+    }
+    save_notes(&notes);
+}
+
+#[tauri::command]
+pub fn get_all_notes(state: State<AppState>) -> HashMap<String, String> {
+    state.notes.lock().clone()
 }
 
 // ============================================================

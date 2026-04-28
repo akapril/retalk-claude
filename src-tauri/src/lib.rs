@@ -45,6 +45,7 @@ pub fn run() {
     // 加载收藏和标签
     let favorites = commands::load_favorites();
     let tags = commands::load_tags();
+    let notes = commands::load_notes();
 
     // 如果有已有索引数据，立即标记就绪 + 初始化 mtime（防止 on_demand_refresh 触发全量扫描）
     let ready = Arc::new(std::sync::atomic::AtomicBool::new(has_existing_data));
@@ -60,6 +61,7 @@ pub fn run() {
         sessions: Arc::new(Mutex::new(Vec::new())),
         favorites: Arc::new(Mutex::new(favorites)),
         tags: Arc::new(Mutex::new(tags)),
+        notes: Arc::new(Mutex::new(notes)),
         ready: Arc::clone(&ready),
     };
 
@@ -184,6 +186,8 @@ pub fn run() {
             commands::set_autostart,
             commands::get_autostart,
             commands::rebuild_index,
+            commands::set_note,
+            commands::get_all_notes,
         ])
         .run(tauri::generate_context!())
         .expect("启动 retalk 失败");

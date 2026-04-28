@@ -11,6 +11,7 @@ let providerFilter = localStorage.getItem("retalk_providerFilter") || "all";
 // 新功能状态
 let favorites = [];       // Feature 3: 收藏的 session_id 列表
 let allTags = {};          // Feature 6: session_id -> [tag1, tag2]
+let allNotes = {};         // session_id -> "备注文本"
 let gitInfoCache = {};     // Feature 2: project_path -> { branch, dirty_count }
 let statsOpen = false;     // Feature 5: 统计面板状态
 let contextSession = null; // Feature 4: 右键菜单关联的会话
@@ -101,6 +102,9 @@ async function init() {
   try {
     allTags = await invoke("get_all_tags");
   } catch (_) { /* 忽略 */ }
+  try {
+    allNotes = await invoke("get_all_notes");
+  } catch (_) { /* 忽略 */ }
   // 加载 provider 状态（空状态引导用）
   try {
     providerStatus = await invoke("get_provider_status");
@@ -152,6 +156,7 @@ async function openSettings() {
     const config = await invoke("get_config");
     document.getElementById("cfg-hotkey").value = config.general.hotkey;
     document.getElementById("cfg-hotkey").dataset.lastValue = config.general.hotkey;
+    document.getElementById("cfg-open-mode").value = localStorage.getItem("retalk_openMode") || "terminal";
     document.getElementById("cfg-terminal").value = config.terminal.preferred;
     document.getElementById("cfg-watcher").checked = config.update.watcher_enabled;
     document.getElementById("cfg-poll").checked = config.update.poll_enabled;
@@ -200,6 +205,8 @@ document.getElementById("settings-save").addEventListener("click", async () => {
 
   try {
     await invoke("save_config", { newConfig });
+    // 保存打开方式到 localStorage
+    localStorage.setItem("retalk_openMode", document.getElementById("cfg-open-mode").value);
     // Feature 8: 保存开机自启状态
     const autostart = document.getElementById("cfg-autostart").checked;
     await invoke("set_autostart", { enabled: autostart });
@@ -586,34 +593,45 @@ function createSessionItem(session, index) {
     tokenHtml = `<span class="token-info">${tokenStr}${costStr ? " ~" + costStr : ""}</span>`;
   }
 
+  // 备注显示
+  const noteText = allNotes[session.session_id] || "";
+  const noteHtml = noteText
+    ? `<div class="note-row"><span class="note-text">${escapeHtml(noteText)}</span><button class="note-edit-btn" data-sid="${session.session_id}" title="编辑备注">&#9998;</button></div>`
+    : (index === selectedIndex ? `<div class="note-row"><button class="note-edit-btn note-add" data-sid="${session.session_id}" title="添加备注">+ 备注</button></div>` : "");
+
   item.innerHTML = `
     <div class="header">
       <span class="project-info">${checkboxHtml}${favBtnHtml}${providerBadge}<span class="project-name">${escapeHtml(session.project_name)}</span>${gitHtml}</span>
       <span class="meta-right">${tokenHtml}<span class="time">${escapeHtml(session.updated_at)}</span></span>
     </div>
     <div class="prompt">${displayPrompt}</div>
+    ${noteHtml}
     ${tagsHtml}
   `;
 
-  // 点击恢复会话 / Ctrl+Click 多选
+  // 单击选中 / Ctrl+Click 多选
   item.addEventListener("click", (e) => {
-    // 不在星标/标签按钮/复选框上触发
-    if (e.target.closest(".fav-btn") || e.target.closest(".tag-add-btn") || e.target.closest(".tag-pill") || e.target.closest(".multi-select-checkbox")) return;
+    if (e.target.closest(".fav-btn") || e.target.closest(".tag-add-btn") || e.target.closest(".tag-pill") || e.target.closest(".multi-select-checkbox") || e.target.closest(".note-edit-btn")) return;
 
-    // Feature 6: Ctrl+Click 进入多选模式
+    // Ctrl+Click 多选
     if (e.ctrlKey) {
       toggleMultiSelect(session.session_id);
       return;
     }
-
     if (multiSelectMode) {
       toggleMultiSelect(session.session_id);
       return;
     }
 
+    // 单击只选中
     selectedIndex = index;
     render();
-    resumeSession(session);
+  });
+
+  // 双击打开会话
+  item.addEventListener("dblclick", (e) => {
+    if (e.target.closest(".fav-btn") || e.target.closest(".tag-add-btn") || e.target.closest(".tag-pill") || e.target.closest(".multi-select-checkbox") || e.target.closest(".note-edit-btn")) return;
+    openSession(session);
   });
 
   // Feature 6: 复选框点击
@@ -659,7 +677,49 @@ function createSessionItem(session, index) {
     });
   });
 
+  // 备注编辑按钮
+  const noteEditBtn = item.querySelector(".note-edit-btn");
+  if (noteEditBtn) {
+    noteEditBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      startNoteEdit(session.session_id, item);
+    });
+  }
+
   return item;
+}
+
+/// 开始编辑备注
+function startNoteEdit(sessionId, itemEl) {
+  const noteRow = itemEl.querySelector(".note-row");
+  if (!noteRow) return;
+
+  const currentNote = allNotes[sessionId] || "";
+  noteRow.innerHTML = "";
+  const input = document.createElement("input");
+  input.className = "note-input";
+  input.value = currentNote;
+  input.placeholder = "输入备注...";
+  noteRow.appendChild(input);
+  input.focus();
+
+  const commit = async () => {
+    const note = input.value.trim();
+    try {
+      await invoke("set_note", { sessionId, note });
+      allNotes = await invoke("get_all_notes");
+    } catch (e) {
+      console.error("保存备注失败:", e);
+    }
+    render();
+  };
+
+  input.addEventListener("blur", commit);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); input.blur(); }
+    if (e.key === "Escape") { e.preventDefault(); input.value = currentNote; input.blur(); }
+    e.stopPropagation();
+  });
 }
 
 // ======================== Feature 1: 预览面板 ========================
@@ -928,7 +988,7 @@ document.addEventListener("keydown", async (e) => {
     e.preventDefault();
     const list = applyFavoriteSort(filteredSessions());
     if (list[selectedIndex]) {
-      await resumeSession(list[selectedIndex]);
+      await openSession(list[selectedIndex]);
     }
   } else if (e.key === "c" && e.ctrlKey) {
     e.preventDefault();
@@ -975,6 +1035,21 @@ async function resumeSession(session) {
     await appWindow.hide();
   } catch (e) {
     console.error("恢复会话失败:", e);
+  }
+}
+
+/// 根据设置中的默认打开方式打开会话
+async function openSession(session) {
+  const openMode = localStorage.getItem("retalk_openMode") || "terminal";
+  if (openMode === "vscode") {
+    try {
+      await invoke("open_in_vscode", { projectPath: session.project_path });
+      await appWindow.hide();
+    } catch (e) {
+      showToast("打开 VS Code 失败: " + e);
+    }
+  } else {
+    await resumeSession(session);
   }
 }
 
@@ -1083,10 +1158,10 @@ function updateStatusBar() {
     return;
   }
   if (currentQuery.trim()) {
-    statusBar.innerHTML = `<span>Enter 恢复</span><span>Esc 清空搜索</span>`;
+    statusBar.innerHTML = `<span>Enter 打开</span><span>Esc 清空搜索</span>`;
     return;
   }
-  statusBar.innerHTML = `<span>↑↓ 导航</span><span>Enter 恢复</span><span>Ctrl+C 复制命令</span><span>Esc 关闭</span>`;
+  statusBar.innerHTML = `<span>↑↓ 导航</span><span>单击选中</span><span>双击打开</span><span>Ctrl+C 复制</span><span>Esc 关闭</span>`;
 }
 
 // ======================== Feature 5: 会话对比视图 ========================
