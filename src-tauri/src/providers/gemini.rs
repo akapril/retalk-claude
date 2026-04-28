@@ -28,7 +28,8 @@ struct GeminiSession {
 struct GeminiMessage {
     #[serde(rename = "type")]
     msg_type: Option<String>,
-    content: Option<String>,
+    /// content 可能是字符串或 [{"text": "..."}] 数组
+    content: Option<serde_json::Value>,
 }
 
 /// projects.json 结构: { "projects": { "d:\\workspace\\foo": "foo", ... } }
@@ -99,6 +100,20 @@ impl SessionProvider for GeminiProvider {
 
         sessions.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
         sessions
+    }
+}
+
+/// 从 content 字段提取文本（兼容字符串和 [{"text":"..."}] 数组两种格式）
+fn extract_content_text(content: &serde_json::Value) -> String {
+    match content {
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Array(arr) => {
+            arr.iter()
+                .filter_map(|item| item.get("text")?.as_str().map(|s| s.to_string()))
+                .collect::<Vec<_>>()
+                .join("\n")
+        }
+        _ => String::new(),
     }
 }
 
@@ -189,8 +204,9 @@ fn parse_gemini_session(
         for msg in messages {
             if msg.msg_type.as_deref() == Some("user") {
                 if let Some(content) = &msg.content {
-                    if !content.is_empty() {
-                        user_messages.push(content.clone());
+                    let text = extract_content_text(content);
+                    if !text.is_empty() {
+                        user_messages.push(text);
                     }
                 }
             }
