@@ -151,13 +151,13 @@ fn resolve_project(dir_name: &str, name_to_path: &HashMap<String, String>) -> (S
         return (real_path.clone(), project_name);
     }
 
-    // 可能是旧版 hash 格式 — 在映射的值（项目名）中找不到，用 hash 缩写
+    // 可能是旧版 hash 格式 — 无法反查项目名，标记为未知
     let is_hash = dir_name.len() > 16 && dir_name.chars().all(|c| c.is_ascii_hexdigit());
     if is_hash {
         let short = &dir_name[..8];
         (
             format!("gemini:{}", dir_name),
-            format!("gemini-{}", short),
+            format!("({}...)", short),
         )
     } else {
         // 非 hash 也不在映射中 — 直接用目录名做项目名
