@@ -267,13 +267,18 @@ function renderStats() {
   statsPanel.innerHTML = html;
 }
 
-// === 会话加载 ===
+// === 会话加载（支持分页） ===
+let isLoadingMore = false;
+let hasMore = true;
+
 async function loadSessions() {
   try {
     if (currentQuery.trim()) {
       sessions = await invoke("search", { query: currentQuery, providerFilter });
+      hasMore = false; // 搜索不分页
     } else {
-      sessions = await invoke("list_sessions", { providerFilter });
+      sessions = await invoke("list_sessions", { providerFilter, offset: 0 });
+      hasMore = sessions.length >= 50; // 如果返回满页，可能还有更多
     }
     selectedIndex = 0;
     render();
@@ -282,6 +287,33 @@ async function loadSessions() {
     console.error("加载会话失败:", e);
   }
 }
+
+async function loadMore() {
+  if (isLoadingMore || !hasMore || currentQuery.trim()) return;
+  isLoadingMore = true;
+  try {
+    const more = await invoke("list_sessions", { providerFilter, offset: sessions.length });
+    if (more.length === 0) {
+      hasMore = false;
+    } else {
+      sessions = [...sessions, ...more];
+      hasMore = more.length >= 50;
+      render();
+      fetchGitInfoForVisible();
+    }
+  } catch (e) {
+    console.error("加载更多失败:", e);
+  }
+  isLoadingMore = false;
+}
+
+// 滚动到底部时自动加载更多
+sessionList.addEventListener("scroll", () => {
+  const { scrollTop, scrollHeight, clientHeight } = sessionList;
+  if (scrollHeight - scrollTop - clientHeight < 100) {
+    loadMore();
+  }
+});
 
 /// 按当前排序模式排序会话列表
 function sortSessions(list) {

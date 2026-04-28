@@ -36,21 +36,21 @@ pub fn search(
     searcher::search(&index, &query, max, filter)
 }
 
-/// 列出会话（按更新时间降序），支持按 provider 过滤，并按需刷新索引
+/// 列出会话（按更新时间降序），支持 provider 过滤和分页
 #[tauri::command]
 pub fn list_sessions(
     state: State<AppState>,
     provider_filter: Option<String>,
+    offset: Option<usize>,
 ) -> Vec<SearchResult> {
     let config = state.config.lock().clone();
 
-    // 按需刷新：先获取索引锁，刷新后释放
+    // 按需刷新
     let refreshed = {
         let index = state.index.lock();
         state.updater.on_demand_refresh(&index, &config)
     };
 
-    // 如果发生了刷新，同步更新 sessions 缓存
     if refreshed {
         let fresh = crate::scanner::scan_all_sessions();
         *state.sessions.lock() = fresh;
@@ -58,7 +58,7 @@ pub fn list_sessions(
 
     let filter = provider_filter.as_deref().filter(|p| *p != "all");
     let index = state.index.lock();
-    searcher::list_all(&index, config.ui.max_results, filter)
+    searcher::list_all(&index, config.ui.max_results, offset.unwrap_or(0), filter)
 }
 
 /// 在终端中恢复 AI 编码工具会话
