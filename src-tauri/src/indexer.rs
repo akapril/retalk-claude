@@ -109,6 +109,7 @@ impl SessionIndex {
         schema_builder.add_text_field("content", text_indexed_only);
         schema_builder.add_date_field("updated_at", INDEXED | STORED | FAST);
         schema_builder.add_u64_field("message_count", STORED);
+        schema_builder.add_u64_field("total_tokens", STORED);
 
         let schema = schema_builder.build();
 
@@ -118,8 +119,10 @@ impl SessionIndex {
             .and_then(|dir| Index::open_or_create(dir, schema.clone()).map_err(|e| Box::new(e) as Box<dyn std::error::Error>))
         {
             Ok(idx) => {
-                // 检查 schema 是否包含新增的 provider 字段
-                if idx.schema().get_field("provider").is_err() {
+                // 检查 schema 是否包含必需字段（provider, total_tokens）
+                if idx.schema().get_field("provider").is_err()
+                    || idx.schema().get_field("total_tokens").is_err()
+                {
                     drop(idx);
                     std::fs::remove_dir_all(&index_dir)?;
                     std::fs::create_dir_all(&index_dir)?;
@@ -190,6 +193,7 @@ impl SessionIndex {
         let content = self.schema.get_field("content").unwrap();
         let updated_at = self.schema.get_field("updated_at").unwrap();
         let message_count = self.schema.get_field("message_count").unwrap();
+        let total_tokens = self.schema.get_field("total_tokens").unwrap();
 
         // 合并所有用户消息作为全文检索内容
         let all_content = session.user_messages.join("\n");
@@ -206,6 +210,7 @@ impl SessionIndex {
             content => all_content.as_str(),
             updated_at => date_val,
             message_count => session.message_count as u64,
+            total_tokens => session.total_tokens,
         ))?;
 
         Ok(())

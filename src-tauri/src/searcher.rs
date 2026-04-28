@@ -16,6 +16,7 @@ pub struct SearchResult {
     pub last_prompt: String,
     pub updated_at: String,
     pub message_count: u64,
+    pub total_tokens: u64,
     pub score: f32,
 }
 
@@ -91,6 +92,7 @@ fn extract_results(
     let last_prompt_field = schema.get_field("last_prompt").unwrap();
     let updated_at_field = schema.get_field("updated_at").unwrap();
     let message_count_field = schema.get_field("message_count").unwrap();
+    let total_tokens_field = schema.get_field("total_tokens").unwrap();
 
     let mut results = Vec::new();
     for (score, doc_addr) in docs {
@@ -126,6 +128,11 @@ fn extract_results(
             .and_then(|v| v.as_u64())
             .unwrap_or(0);
 
+        let tokens = doc
+            .get_first(total_tokens_field)
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+
         results.push(SearchResult {
             session_id: get_text(session_id_field),
             provider: get_text(provider_field),
@@ -135,6 +142,7 @@ fn extract_results(
             last_prompt: get_text(last_prompt_field),
             updated_at: updated_str,
             message_count: msg_count,
+            total_tokens: tokens,
             score: *score,
         });
     }

@@ -69,6 +69,7 @@ fn parse_codex_session(path: &Path) -> Option<Session> {
     let mut user_messages = Vec::new();
     let mut first_timestamp: Option<DateTime<Utc>> = None;
     let mut last_timestamp: Option<DateTime<Utc>> = None;
+    let mut total_tokens: u64 = 0;
 
     for line in reader.lines() {
         let line = match line {
@@ -103,6 +104,13 @@ fn parse_codex_session(path: &Path) -> Option<Session> {
             }
             Some("event_msg") => {
                 if let Some(payload) = &entry.payload {
+                    // 提取 token 统计
+                    if payload.get("type").and_then(|v| v.as_str()) == Some("token_count") {
+                        let input = payload.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+                        let output = payload.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+                        total_tokens += input + output;
+                    }
+                    // 提取用户消息
                     if payload.get("type").and_then(|v| v.as_str()) == Some("user_message") {
                         if let Some(msg) = payload.get("message").and_then(|v| v.as_str()) {
                             if !msg.is_empty() {
@@ -137,5 +145,6 @@ fn parse_codex_session(path: &Path) -> Option<Session> {
         updated_at: last_timestamp.unwrap_or_else(Utc::now),
         message_count: user_messages.len() as u32,
         user_messages,
+        total_tokens,
     })
 }

@@ -409,10 +409,18 @@ function createSessionItem(session, index) {
     tagsHtml += `</div>`;
   }
 
+  // Token/成本估算显示
+  let tokenHtml = "";
+  if (session.total_tokens > 0) {
+    const tokenStr = formatTokens(session.total_tokens);
+    const costStr = estimateCost(session.provider, session.total_tokens);
+    tokenHtml = `<span class="token-info">${tokenStr}${costStr ? " ~" + costStr : ""}</span>`;
+  }
+
   item.innerHTML = `
     <div class="header">
       <span class="project-info">${favBtnHtml}${providerBadge}<span class="project-name">${escapeHtml(session.project_name)}</span>${gitHtml}</span>
-      <span class="time">${escapeHtml(session.updated_at)}</span>
+      <span class="meta-right">${tokenHtml}<span class="time">${escapeHtml(session.updated_at)}</span></span>
     </div>
     <div class="prompt">${displayPrompt}</div>
     ${tagsHtml}
@@ -601,6 +609,27 @@ contextMenu.querySelectorAll(".ctx-item").forEach((item) => {
       case "copy-cmd":
         await copyCommand(s);
         break;
+      case "export-md":
+        try {
+          const md = await invoke("export_session_markdown", { sessionId: s.session_id });
+          if (navigator.clipboard) {
+            await navigator.clipboard.writeText(md);
+          }
+        } catch (e) {
+          console.error("导出 Markdown 失败:", e);
+        }
+        break;
+      case "export-file":
+        try {
+          // 保存到桌面
+          const desktop = await getDesktopPath();
+          const fileName = `${s.project_name}_${s.session_id.slice(0, 8)}.md`;
+          const filePath = `${desktop}\\${fileName}`;
+          await invoke("export_session_to_file", { sessionId: s.session_id, filePath });
+        } catch (e) {
+          console.error("导出到文件失败:", e);
+        }
+        break;
     }
   });
 });
@@ -774,6 +803,61 @@ function highlightMatch(text, query) {
   const queryEscaped = escapeHtml(query.trim());
   const regex = new RegExp(`(${queryEscaped.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi");
   return escaped.replace(regex, "<mark>$1</mark>");
+}
+
+// ======================== Token/成本估算 ========================
+
+/// 格式化 token 数为可读字符串
+function formatTokens(tokens) {
+  if (tokens >= 1000000) {
+    return (tokens / 1000000).toFixed(1) + "M tokens";
+  } else if (tokens >= 1000) {
+    return (tokens / 1000).toFixed(1) + "k tokens";
+  }
+  return tokens + " tokens";
+}
+
+/// 根据 provider 估算成本（粗略估算，假设 input:output = 1:1）
+function estimateCost(provider, tokens) {
+  if (tokens === 0) return "";
+  // 粗略按总 token 的一半为 input、一半为 output 估算
+  const half = tokens / 2;
+  let cost = 0;
+  switch (provider) {
+    case "claude":
+      // ~$3/M input + $15/M output
+      cost = (half * 3 + half * 15) / 1000000;
+      break;
+    case "codex":
+      // ~$2/M input + $8/M output
+      cost = (half * 2 + half * 8) / 1000000;
+      break;
+    default:
+      return "";
+  }
+  if (cost < 0.01) return "$<0.01";
+  return "$" + cost.toFixed(2);
+}
+
+/// 获取桌面路径（通过环境变量近似）
+async function getDesktopPath() {
+  // Windows: %USERPROFILE%\Desktop
+  // 由于 Tauri 无法直接获取环境变量，用固定路径
+  return "C:\\Users\\" + (await getUsername()) + "\\Desktop";
+}
+
+/// 获取当前用户名（简单近似）
+async function getUsername() {
+  try {
+    // 从某个已知的 project_path 推断用户名
+    // 兜底使用 "Administrator"
+    const s = sessions.find((s) => s.project_path.includes("\\Users\\"));
+    if (s) {
+      const match = s.project_path.match(/\\Users\\([^\\]+)/);
+      if (match) return match[1];
+    }
+  } catch (_) {}
+  return "Administrator";
 }
 
 // 窗口可见时刷新

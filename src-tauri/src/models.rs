@@ -15,6 +15,7 @@ pub struct Session {
     pub updated_at: DateTime<Utc>,
     pub message_count: u32,
     pub user_messages: Vec<String>,
+    pub total_tokens: u64, // 总 token 数（从会话文件中提取）
 }
 
 /// history.jsonl 中的单行记录

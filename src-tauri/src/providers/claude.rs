@@ -145,12 +145,26 @@ fn parse_session_file(
     let mut first_timestamp: Option<DateTime<Utc>> = None;
     let mut last_timestamp: Option<DateTime<Utc>> = None;
     let mut message_count: u32 = 0;
+    let mut total_tokens: u64 = 0;
 
     for line in reader.lines() {
         let line = match line {
             Ok(l) => l,
             Err(_) => continue,
         };
+
+        // 先尝试作为通用 JSON 解析以提取 token 信息
+        if let Ok(raw) = serde_json::from_str::<serde_json::Value>(&line) {
+            // 提取 assistant 消息中的 usage 信息
+            if raw.get("type").and_then(|v| v.as_str()) == Some("assistant") {
+                if let Some(usage) = raw.pointer("/message/usage") {
+                    let input = usage.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+                    let output = usage.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+                    total_tokens += input + output;
+                }
+            }
+        }
+
         let entry: SessionEntry = match serde_json::from_str(&line) {
             Ok(e) => e,
             Err(_) => continue,
@@ -205,6 +219,7 @@ fn parse_session_file(
         updated_at: last_timestamp.unwrap_or_else(Utc::now),
         message_count,
         user_messages,
+        total_tokens,
     })
 }
 

@@ -144,6 +144,7 @@ fn parse_continue_session(path: &Path) -> Option<Session> {
         updated_at: mtime,
         message_count: user_messages.len() as u32,
         user_messages,
+        total_tokens: 0, // Continue 会话文件中无 token 数据
     })
 }
 

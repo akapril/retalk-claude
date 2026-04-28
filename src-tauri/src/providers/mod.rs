@@ -1,6 +1,8 @@
+pub mod aider;
 pub mod claude;
 pub mod codex;
 pub mod continue_dev;
+pub mod cursor;
 pub mod gemini;
 
 use crate::models::Session;
@@ -22,6 +24,8 @@ pub fn all_providers() -> Vec<Box<dyn SessionProvider>> {
         Box::new(codex::CodexProvider),
         Box::new(gemini::GeminiProvider),
         Box::new(continue_dev::ContinueProvider),
+        Box::new(aider::AiderProvider),
+        Box::new(cursor::CursorProvider),
     ];
     providers.into_iter().filter(|p| p.is_available()).collect()
 }

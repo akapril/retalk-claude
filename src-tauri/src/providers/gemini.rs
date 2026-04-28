@@ -132,5 +132,6 @@ fn parse_gemini_session(path: &Path, project_hash: &str) -> Option<Session> {
         updated_at: last_updated,
         message_count: user_messages.len() as u32,
         user_messages,
+        total_tokens: 0, // Gemini 会话文件中无 token 数据
     })
 }

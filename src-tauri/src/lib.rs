@@ -141,6 +141,8 @@ pub fn run() {
             commands::open_in_explorer,
             commands::set_tags,
             commands::get_all_tags,
+            commands::export_session_markdown,
+            commands::export_session_to_file,
         ])
         .run(tauri::generate_context!())
         .expect("启动 retalk 失败");
