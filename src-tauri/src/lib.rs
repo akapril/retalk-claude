@@ -183,6 +183,7 @@ pub fn run() {
             commands::auto_tag_sessions,
             commands::set_autostart,
             commands::get_autostart,
+            commands::rebuild_index,
         ])
         .run(tauri::generate_context!())
         .expect("启动 retalk 失败");

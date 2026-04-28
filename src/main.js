@@ -1244,6 +1244,17 @@ document.getElementById("auto-tag-btn").addEventListener("click", async () => {
   }
 });
 
+document.getElementById("rebuild-index-btn").addEventListener("click", async () => {
+  try {
+    showToast("正在重建索引...");
+    const count = await invoke("rebuild_index");
+    showToast(`索引重建完成，共 ${count} 条会话`);
+    await loadSessions();
+  } catch (e) {
+    showToast("重建失败: " + e);
+  }
+});
+
 // === 快捷键录制 ===
 const hotkeyInput = document.getElementById("cfg-hotkey");
 

@@ -387,6 +387,20 @@ pub fn get_all_tags(state: State<AppState>) -> TagsMap {
 }
 
 // ============================================================
+// 重建索引
+// ============================================================
+
+#[tauri::command]
+pub fn rebuild_index(state: State<AppState>) -> Result<u32, String> {
+    let sessions = crate::scanner::scan_all_sessions();
+    let count = sessions.len() as u32;
+    let index = state.index.lock();
+    index.rebuild(&sessions).map_err(|e| e.to_string())?;
+    *state.sessions.lock() = sessions;
+    Ok(count)
+}
+
+// ============================================================
 // Feature 1: 空状态引导 — 返回各 provider 的可用状态
 // ============================================================
 
