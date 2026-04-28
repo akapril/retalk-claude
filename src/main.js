@@ -152,25 +152,30 @@ async function openSettings() {
   compareOpen = false;
   updateStatusBar();
 
-  try {
-    const config = await invoke("get_config");
+  // 先显示面板，localStorage 值立即填入（不阻塞）
+  document.getElementById("cfg-open-mode").value = localStorage.getItem("retalk_openMode") || "terminal";
+
+  // 并行加载后端数据
+  const [configResult, autostartResult] = await Promise.allSettled([
+    invoke("get_config"),
+    invoke("get_autostart"),
+  ]);
+
+  if (configResult.status === "fulfilled") {
+    const config = configResult.value;
     document.getElementById("cfg-hotkey").value = config.general.hotkey;
     document.getElementById("cfg-hotkey").dataset.lastValue = config.general.hotkey;
-    document.getElementById("cfg-open-mode").value = localStorage.getItem("retalk_openMode") || "terminal";
     document.getElementById("cfg-terminal").value = config.terminal.preferred;
     document.getElementById("cfg-watcher").checked = config.update.watcher_enabled;
     document.getElementById("cfg-poll").checked = config.update.poll_enabled;
     document.getElementById("cfg-poll-interval").value = config.update.poll_interval_secs;
     document.getElementById("cfg-ondemand").checked = config.update.on_demand_enabled;
     document.getElementById("cfg-max-results").value = config.ui.max_results;
-  } catch (e) {
-    console.error("加载配置失败:", e);
   }
 
-  // Feature 8: 加载开机自启状态
-  try {
-    document.getElementById("cfg-autostart").checked = await invoke("get_autostart");
-  } catch (_) { /* 忽略 */ }
+  if (autostartResult.status === "fulfilled") {
+    document.getElementById("cfg-autostart").checked = autostartResult.value;
+  }
 }
 
 function closeSettings() {
