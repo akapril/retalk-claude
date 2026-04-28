@@ -109,7 +109,7 @@ pub fn run() {
             let menu = Menu::with_items(app, &[&show_i, &quit_i])?;
 
             let _tray = TrayIconBuilder::new()
-                .icon(tauri::include_image!("icons/icon.png"))
+                .icon(tauri::include_image!("icons/tray-32.png"))
                 .menu(&menu)
                 .tooltip("retalk - Claude Code 会话管理")
                 .show_menu_on_left_click(false)
