@@ -314,7 +314,7 @@ function renderEcosystem(data) {
       <button class="eco-tab ${ecoTab === 'plugins' ? 'active' : ''}" data-tab="plugins">插件 (${data.plugins.length})</button>
       <button class="eco-tab ${ecoTab === 'skills' ? 'active' : ''}" data-tab="skills">Skills (${data.skills.length})</button>
       <button class="eco-tab ${ecoTab === 'mcp' ? 'active' : ''}" data-tab="mcp">MCP (${data.mcp_servers.length})</button>
-      <button class="eco-tab ${ecoTab === 'configs' ? 'active' : ''}" data-tab="configs">配置 (${data.configs.length})</button>
+      <button class="eco-tab ${ecoTab === 'overview' ? 'active' : ''}" data-tab="overview">概览</button>
     </div>
   `;
 
@@ -482,28 +482,31 @@ function renderEcosystem(data) {
         contentHtml += `</div>`;
       });
     }
-  } else if (ecoTab === "configs") {
-    if (data.configs.length === 0) {
-      contentHtml = '<div class="eco-empty">未检测到配置</div>';
+  } else if (ecoTab === "overview") {
+    if (!data.overview || data.overview.length === 0) {
+      contentHtml = '<div class="eco-empty">未检测到工具</div>';
     } else {
-      // 透视表：行 = 配置项，列 = 工具
-      const tools = [...new Set(data.configs.map(c => c.tool))];
-      const keys = [...new Set(data.configs.map(c => c.key))];
-      const lookup = {};
-      data.configs.forEach(c => { lookup[`${c.tool}:${c.key}`] = c.value; });
-
-      contentHtml = `<table class="eco-config-table"><thead><tr><th>配置项</th>`;
-      tools.forEach(t => { contentHtml += `<th>${escapeHtml(t)}</th>`; });
-      contentHtml += `</tr></thead><tbody>`;
-      keys.forEach(k => {
-        contentHtml += `<tr><td>${escapeHtml(k)}</td>`;
-        tools.forEach(t => {
-          const val = lookup[`${t}:${k}`] || "-";
-          contentHtml += `<td>${escapeHtml(val)}</td>`;
-        });
-        contentHtml += `</tr>`;
+      data.overview.forEach(t => {
+        const statusDot = t.installed
+          ? '<span class="eco-ov-dot eco-ov-dot-on"></span>'
+          : '<span class="eco-ov-dot eco-ov-dot-off"></span>';
+        contentHtml += `
+          <div class="eco-ov-card ${t.installed ? '' : 'eco-ov-card-off'}">
+            <div class="eco-ov-header">
+              ${statusDot}
+              <span class="eco-ov-name">${escapeHtml(t.name)}</span>
+              <span class="eco-ov-version">${t.installed ? escapeHtml(t.version) : '未安装'}</span>
+            </div>
+            ${t.installed ? `
+            <div class="eco-ov-stats">
+              <span>${t.session_count} 会话</span>
+              <span>${t.mcp_count} MCP</span>
+              <span>${t.skill_count} Skills</span>
+            </div>
+            <div class="eco-ov-path">${escapeHtml(t.data_dir)}</div>
+            ` : ''}
+          </div>`;
       });
-      contentHtml += `</tbody></table>`;
     }
   }
 

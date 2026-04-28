@@ -6,10 +6,21 @@ use std::path::PathBuf;
 pub struct EcosystemData {
     pub skills: Vec<SkillInfo>,
     pub mcp_servers: Vec<McpServerInfo>,
-    pub configs: Vec<ToolConfig>,
+    pub overview: Vec<ToolOverview>,
     pub plugins: Vec<PluginInfo>,
     pub available_plugins: Vec<AvailablePlugin>,
     pub extensions: Vec<ExtensionInfo>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ToolOverview {
+    pub name: String,
+    pub installed: bool,
+    pub version: String,
+    pub data_dir: String,
+    pub session_count: u32,
+    pub mcp_count: u32,
+    pub skill_count: u32,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -66,31 +77,20 @@ pub struct McpServerInfo {
     pub source: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub struct ToolConfig {
-    pub tool: String,
-    pub key: String,
-    pub value: String,
-}
-
 /// 扫描所有 AI 编码工具的生态信息
 pub fn scan_ecosystem() -> EcosystemData {
     let mut skills = Vec::new();
     let mut mcp_servers = Vec::new();
-    let mut configs = Vec::new();
 
     // Claude Code
     scan_claude_skills(&mut skills);
     scan_claude_mcp(&mut mcp_servers);
-    scan_claude_config(&mut configs);
 
     // Codex CLI
     scan_codex_mcp(&mut mcp_servers);
-    scan_codex_config(&mut configs);
 
     // Gemini CLI
     scan_gemini_mcp(&mut mcp_servers);
-    scan_gemini_config(&mut configs);
 
     // OpenCode
     scan_opencode_mcp(&mut mcp_servers);
@@ -100,21 +100,127 @@ pub fn scan_ecosystem() -> EcosystemData {
 
     // Claude Code 插件
     let plugins = scan_claude_plugins();
-
-    // 可安装插件（marketplace 中未安装的）
     let available_plugins = scan_available_plugins(&plugins);
 
     // Gemini 扩展
     let extensions = scan_gemini_extensions();
 
+    // 工具概览
+    let overview = build_overview(&skills, &mcp_servers, &plugins, &extensions);
+
     EcosystemData {
         skills,
         mcp_servers,
-        configs,
+        overview,
         plugins,
         available_plugins,
         extensions,
     }
+}
+
+/// 构建各工具概览信息
+fn build_overview(
+    skills: &[SkillInfo],
+    mcp_servers: &[McpServerInfo],
+    _plugins: &[PluginInfo],
+    _extensions: &[ExtensionInfo],
+) -> Vec<ToolOverview> {
+    use std::process::Command;
+    let home = dirs::home_dir().unwrap_or_default();
+
+    let tools = vec![
+        ("Claude Code", "claude", home.join(".claude")),
+        ("Codex CLI", "codex", home.join(".codex")),
+        ("Gemini CLI", "gemini", home.join(".gemini")),
+        ("OpenCode", "opencode", home.join(".local").join("share").join("opencode")),
+        ("Kilo Code", "kilo", home.join(".local").join("share").join("kilo")),
+    ];
+
+    tools.iter().map(|(display_name, cmd, data_dir)| {
+        // 检测是否安装并获取版本
+        let (installed, version) = get_tool_version(cmd);
+
+        // 统计数量
+        let mcp_count = mcp_servers.iter().filter(|s| s.tool == *cmd).count() as u32;
+        let skill_count = if *cmd == "claude" {
+            skills.len() as u32
+        } else {
+            0
+        };
+
+        // 统计会话数（检查数据目录大小/文件数）
+        let session_count = if *cmd == "claude" {
+            count_claude_sessions(&home)
+        } else if data_dir.exists() {
+            count_files_in_dir(data_dir, "jsonl") + count_files_in_dir(data_dir, "json")
+        } else {
+            0
+        };
+
+        ToolOverview {
+            name: display_name.to_string(),
+            installed,
+            version,
+            data_dir: data_dir.to_string_lossy().to_string(),
+            session_count,
+            mcp_count,
+            skill_count,
+        }
+    }).collect()
+}
+
+fn get_tool_version(cmd: &str) -> (bool, String) {
+    #[cfg(windows)]
+    fn make_cmd(program: &str) -> std::process::Command {
+        use std::os::windows::process::CommandExt;
+        let mut cmd = std::process::Command::new(program);
+        cmd.creation_flags(0x08000000);
+        cmd
+    }
+    #[cfg(not(windows))]
+    fn make_cmd(program: &str) -> std::process::Command {
+        std::process::Command::new(program)
+    }
+
+    match make_cmd(cmd).arg("--version").output() {
+        Ok(output) if output.status.success() => {
+            let ver = String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .next()
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            (true, ver)
+        }
+        _ => (false, String::new()),
+    }
+}
+
+fn count_claude_sessions(home: &std::path::Path) -> u32 {
+    let projects_dir = home.join(".claude").join("projects");
+    if !projects_dir.exists() { return 0; }
+    let mut count = 0u32;
+    if let Ok(dirs) = std::fs::read_dir(&projects_dir) {
+        for entry in dirs.flatten() {
+            if entry.path().is_dir() {
+                if let Ok(files) = std::fs::read_dir(entry.path()) {
+                    count += files.flatten()
+                        .filter(|f| f.path().extension().and_then(|e| e.to_str()) == Some("jsonl"))
+                        .count() as u32;
+                }
+            }
+        }
+    }
+    count
+}
+
+fn count_files_in_dir(dir: &std::path::Path, ext: &str) -> u32 {
+    if !dir.exists() { return 0; }
+    std::fs::read_dir(dir)
+        .map(|entries| entries.flatten()
+            .filter(|f| f.path().extension().and_then(|e| e.to_str()) == Some(ext))
+            .count() as u32)
+        .unwrap_or(0)
 }
 
 // === Claude Code ===
@@ -342,31 +448,6 @@ fn scan_plugin_mcp_files(cache_dir: &PathBuf, servers: &mut Vec<McpServerInfo>) 
     }
 }
 
-fn scan_claude_config(configs: &mut Vec<ToolConfig>) {
-    let home = dirs::home_dir().unwrap_or_default();
-    let settings_path = home.join(".claude").join("settings.json");
-    if let Some(data) = read_json_file(&settings_path) {
-        if let Some(model) = data.get("model").and_then(|v| v.as_str()) {
-            configs.push(ToolConfig {
-                tool: "claude".into(),
-                key: "model".into(),
-                value: model.into(),
-            });
-        }
-        if let Some(pm) = data
-            .get("permissions")
-            .and_then(|v| v.get("mode"))
-            .and_then(|v| v.as_str())
-        {
-            configs.push(ToolConfig {
-                tool: "claude".into(),
-                key: "permission_mode".into(),
-                value: pm.into(),
-            });
-        }
-    }
-}
-
 // === Codex CLI ===
 
 fn scan_codex_mcp(servers: &mut Vec<McpServerInfo>) {
@@ -412,39 +493,6 @@ fn scan_codex_mcp(servers: &mut Vec<McpServerInfo>) {
     }
 }
 
-fn scan_codex_config(configs: &mut Vec<ToolConfig>) {
-    let home = dirs::home_dir().unwrap_or_default();
-    let config_path = home.join(".codex").join("config.toml");
-    if !config_path.exists() {
-        return;
-    }
-
-    let content = fs::read_to_string(&config_path).unwrap_or_default();
-    if let Ok(toml_val) = content.parse::<toml::Value>() {
-        if let Some(model) = toml_val.get("model").and_then(|v| v.as_str()) {
-            configs.push(ToolConfig {
-                tool: "codex".into(),
-                key: "model".into(),
-                value: model.into(),
-            });
-        }
-        if let Some(provider) = toml_val.get("model_provider").and_then(|v| v.as_str()) {
-            configs.push(ToolConfig {
-                tool: "codex".into(),
-                key: "provider".into(),
-                value: provider.into(),
-            });
-        }
-        if let Some(approval) = toml_val.get("approval_policy").and_then(|v| v.as_str()) {
-            configs.push(ToolConfig {
-                tool: "codex".into(),
-                key: "approval".into(),
-                value: approval.into(),
-            });
-        }
-    }
-}
-
 // === Gemini CLI ===
 
 fn scan_gemini_mcp(servers: &mut Vec<McpServerInfo>) {
@@ -459,19 +507,6 @@ fn scan_gemini_mcp(servers: &mut Vec<McpServerInfo>) {
     }
 }
 
-fn scan_gemini_config(configs: &mut Vec<ToolConfig>) {
-    let home = dirs::home_dir().unwrap_or_default();
-    let settings_path = home.join(".gemini").join("settings.json");
-    if let Some(data) = read_json_file(&settings_path) {
-        if let Some(model) = data.get("model").and_then(|v| v.as_str()) {
-            configs.push(ToolConfig {
-                tool: "gemini".into(),
-                key: "model".into(),
-                value: model.into(),
-            });
-        }
-    }
-}
 
 // === OpenCode ===
 

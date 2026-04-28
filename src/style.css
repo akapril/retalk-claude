@@ -906,6 +906,18 @@ html, body {
 .eco-config-table td { padding: 4px 8px; color: var(--text); border-bottom: 1px solid rgba(255,255,255,0.03); }
 .eco-empty { color: var(--text-dim); font-size: 12px; padding: 10px 0; text-align: center; }
 
+/* 概览卡片 */
+.eco-ov-card { background: var(--bg-item); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+.eco-ov-card-off { opacity: 0.4; }
+.eco-ov-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.eco-ov-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.eco-ov-dot-on { background: #22c55e; }
+.eco-ov-dot-off { background: #6b7280; }
+.eco-ov-name { font-size: 13px; font-weight: 600; color: var(--text); }
+.eco-ov-version { font-size: 10px; color: var(--text-dim); background: rgba(255,255,255,0.06); padding: 1px 6px; border-radius: 3px; }
+.eco-ov-stats { display: flex; gap: 12px; font-size: 11px; color: var(--text-dim); margin-bottom: 4px; }
+.eco-ov-path { font-size: 10px; color: var(--text-dim); opacity: 0.5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* 插件卡片 */
 .eco-plugin-card {
   background: var(--bg-item);
