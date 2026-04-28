@@ -1,9 +1,9 @@
 const { invoke } = window.__TAURI__.core;
 const { getCurrentWindow } = window.__TAURI__.window;
 
-// macOS 透明窗口需要 margin 避免圆角白边
-if (navigator.platform.includes("Mac")) {
-  document.getElementById("app").style.cssText += "margin:4px;height:calc(100vh - 8px);";
+// 检测平台，macOS 需要特殊透明处理
+if (navigator.userAgent.includes("Macintosh") || navigator.platform.includes("Mac")) {
+  document.documentElement.classList.add("macos");
 }
 
 let sessions = [];

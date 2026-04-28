@@ -36,6 +36,12 @@ html, body {
   overflow: hidden;
 }
 
+/* macOS: 窗口透明时需要 inset 避免圆角白边 */
+.macos #app {
+  margin: 4px;
+  height: calc(100vh - 8px);
+}
+
 .search-bar {
   display: flex;
   align-items: center;
