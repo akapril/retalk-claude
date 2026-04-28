@@ -71,14 +71,74 @@ pub fn scan_ecosystem() -> EcosystemData {
 
 fn scan_claude_skills(skills: &mut Vec<SkillInfo>) {
     let home = dirs::home_dir().unwrap_or_default();
+    let claude_dir = home.join(".claude");
 
     // 全局 skills: ~/.claude/skills/
-    let global_dir = home.join(".claude").join("skills");
-    scan_skill_dir(&global_dir, "claude", "global", skills);
+    scan_skill_dir(&claude_dir.join("skills"), "claude", "global", skills);
 
     // 兼容旧版 commands 目录
-    let commands_dir = home.join(".claude").join("commands");
-    scan_skill_dir(&commands_dir, "claude", "global", skills);
+    scan_skill_dir(&claude_dir.join("commands"), "claude", "global", skills);
+
+    // 插件内的 skills: ~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/skills/
+    let plugins_cache = claude_dir.join("plugins").join("cache");
+    if plugins_cache.exists() {
+        scan_plugins_dir(&plugins_cache, skills);
+    }
+
+    // 独立安装的插件: ~/.claude/plugins/<plugin-name>/skills/
+    let plugins_dir = claude_dir.join("plugins");
+    if plugins_dir.exists() {
+        if let Ok(entries) = fs::read_dir(&plugins_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                // 跳过非目录和 cache 等已知子目录
+                if !path.is_dir() { continue; }
+                let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                if name == "cache" || name == "marketplaces" || name == "data" { continue; }
+                // 检查是否有 skills 子目录
+                let skills_dir = path.join("skills");
+                if skills_dir.exists() {
+                    scan_skill_dir(&skills_dir, "claude", &format!("plugin:{}", name), skills);
+                }
+            }
+        }
+    }
+}
+
+/// 递归扫描 plugins/cache 目录，查找所有 skills
+fn scan_plugins_dir(cache_dir: &PathBuf, skills: &mut Vec<SkillInfo>) {
+    // 结构: cache/<marketplace>/<plugin>/<version>/skills/<skill-name>/SKILL.md
+    let marketplaces = match fs::read_dir(cache_dir) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+    for mp_entry in marketplaces.flatten() {
+        let mp_path = mp_entry.path();
+        if !mp_path.is_dir() { continue; }
+        let plugins = match fs::read_dir(&mp_path) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        for plugin_entry in plugins.flatten() {
+            let plugin_path = plugin_entry.path();
+            if !plugin_path.is_dir() { continue; }
+            let plugin_name = plugin_path.file_name().unwrap_or_default().to_string_lossy().to_string();
+            // 找最新版本目录（按名称排序取最后一个）
+            let mut versions: Vec<_> = fs::read_dir(&plugin_path)
+                .into_iter()
+                .flatten()
+                .flatten()
+                .filter(|e| e.path().is_dir())
+                .collect();
+            versions.sort_by(|a, b| b.file_name().cmp(&a.file_name()));
+            if let Some(version_entry) = versions.first() {
+                let skills_dir = version_entry.path().join("skills");
+                if skills_dir.exists() {
+                    scan_skill_dir(&skills_dir, "claude", &format!("plugin:{}", plugin_name), skills);
+                }
+            }
+        }
+    }
 }
 
 fn scan_skill_dir(dir: &PathBuf, tool: &str, scope: &str, skills: &mut Vec<SkillInfo>) {
