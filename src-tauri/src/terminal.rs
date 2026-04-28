@@ -80,30 +80,30 @@ pub fn resume_in_terminal(
 
     let result = match terminal {
         TerminalKind::WindowsTerminal => {
-            // wt 使用 -d 设置工作目录，cmd /k 执行工具命令
-            let cmd_arg = if tool_cmd.is_empty() {
-                // 无恢复命令时只打开目录
-                String::new()
-            } else {
-                tool_cmd.clone()
-            };
+            // wt.exe 对含中文/空格的路径需要用完整的命令行字符串
+            // 使用 cmd /k 统一处理 cd 和恢复命令
+            let full_cmd = build_resume_command(provider, project_path, session_id);
+            // wt 的 commandline 参数用 -- 分隔
             Command::new("wt.exe")
                 .args([
                     "new-tab",
                     "--title",
                     &format!("retalk: {}", project_name),
-                    "-d",
-                    project_path,
                     "cmd",
                     "/k",
-                    &cmd_arg,
+                    &full_cmd,
                 ])
                 .spawn()
         }
         TerminalKind::PowerShell => {
-            let full_cmd = build_resume_command(provider, project_path, session_id);
+            // PowerShell 用 Set-Location 处理含特殊字符的路径
+            let ps_cmd = if tool_cmd.is_empty() {
+                format!("Set-Location -LiteralPath '{}'", project_path)
+            } else {
+                format!("Set-Location -LiteralPath '{}'; {}", project_path, tool_cmd)
+            };
             Command::new("pwsh.exe")
-                .args(["-NoExit", "-Command", &full_cmd])
+                .args(["-NoExit", "-Command", &ps_cmd])
                 .spawn()
         }
         TerminalKind::Cmd => {
