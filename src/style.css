@@ -1006,3 +1006,21 @@ html, body {
 .eco-plugin-btn-danger:hover {
   background: rgba(239, 68, 68, 0.15);
 }
+
+/* 可安装插件卡片（虚线边框） */
+.eco-plugin-available { border-style: dashed; }
+
+/* 安装按钮 */
+.eco-plugin-btn-install { background: var(--text-highlight); color: #fff; border-color: var(--text-highlight); }
+.eco-plugin-btn-install:hover { opacity: 0.9; }
+
+/* 添加 MCP 服务器触发按钮 */
+.eco-add-trigger { width: 100%; padding: 8px; border: 1px dashed var(--border); border-radius: 6px; background: transparent; color: var(--text-dim); cursor: pointer; font-size: 12px; font-family: inherit; margin-bottom: 12px; }
+.eco-add-trigger:hover { border-color: var(--text-highlight); color: var(--text-highlight); }
+
+/* 添加 MCP 服务器表单 */
+.eco-add-form { background: var(--bg-item); border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 6px; }
+.eco-add-input { background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 4px; padding: 5px 8px; color: var(--text); font-size: 12px; font-family: inherit; outline: none; }
+.eco-add-input:focus { border-color: var(--text-highlight); }
+.eco-add-input-wide { width: 100%; }
+.eco-add-actions { display: flex; gap: 6px; justify-content: flex-end; }

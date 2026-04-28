@@ -192,8 +192,10 @@ pub fn run() {
             commands::get_ecosystem,
             commands::toggle_mcp_server,
             commands::plugin_toggle,
+            commands::plugin_install,
             commands::plugin_uninstall,
             commands::plugin_update,
+            commands::add_mcp_server_cmd,
         ])
         .run(tauri::generate_context!())
         .expect("启动 retalk 失败");

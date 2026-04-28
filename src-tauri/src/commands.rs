@@ -691,6 +691,27 @@ pub fn plugin_uninstall(plugin_id: String) -> Result<String, String> {
     }
 }
 
+/// 安装插件（调用 claude plugins install CLI）
+#[tauri::command]
+pub fn plugin_install(plugin_id: String) -> Result<String, String> {
+    let output = silent_command("claude")
+        .args(["plugins", "install", &plugin_id])
+        .output()
+        .map_err(|e| format!("执行失败: {}", e))?;
+    if output.status.success() {
+        Ok(format!("{} 已安装", plugin_id))
+    } else {
+        let err = String::from_utf8_lossy(&output.stderr).to_string();
+        Err(format!("安装失败: {}", err))
+    }
+}
+
+/// 添加 MCP 服务器到 Claude Code settings.json
+#[tauri::command]
+pub fn add_mcp_server_cmd(name: String, command: String, args: Vec<String>) -> Result<(), String> {
+    crate::ecosystem::add_mcp_server(&name, &command, &args)
+}
+
 #[tauri::command]
 pub fn plugin_update(plugin_id: String) -> Result<String, String> {
     let output = silent_command("claude")

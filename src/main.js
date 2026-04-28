@@ -319,35 +319,56 @@ function renderEcosystem(data) {
   let contentHtml = "";
 
   if (ecoTab === "plugins") {
-    if (data.plugins.length === 0) {
+    if (data.plugins.length === 0 && data.available_plugins.length === 0) {
       contentHtml = '<div class="eco-empty">未检测到已安装插件</div>';
     } else {
-      data.plugins.forEach(p => {
-        const badges = [];
-        if (p.has_skills) badges.push(`<span class="eco-badge eco-badge-skill">${p.skill_count} skills</span>`);
-        if (p.has_mcp) badges.push('<span class="eco-badge eco-badge-mcp">MCP</span>');
-        const statusClass = p.enabled ? "on" : "off";
-        const statusText = p.enabled ? "已启用" : "已禁用";
-        contentHtml += `
-          <div class="eco-plugin-card ${p.enabled ? '' : 'eco-plugin-disabled'}">
-            <div class="eco-plugin-header">
-              <span class="eco-plugin-name">${escapeHtml(p.name)}</span>
-              <span class="eco-plugin-version">v${escapeHtml(p.version)}</span>
-              <span class="eco-plugin-status">${statusText}</span>
-            </div>
-            <div class="eco-plugin-desc">${escapeHtml(p.description)}</div>
-            <div class="eco-plugin-meta">
-              <span>${escapeHtml(p.marketplace)}</span>
-              <span>${escapeHtml(p.installed_at)}</span>
-              ${badges.join("")}
-            </div>
-            <div class="eco-plugin-actions">
-              <button class="eco-plugin-btn" data-action="toggle" data-id="${escapeHtml(p.full_id)}" data-enabled="${p.enabled}">${p.enabled ? '禁用' : '启用'}</button>
-              <button class="eco-plugin-btn" data-action="update" data-id="${escapeHtml(p.full_id)}">更新</button>
-              <button class="eco-plugin-btn eco-plugin-btn-danger" data-action="uninstall" data-id="${escapeHtml(p.full_id)}">卸载</button>
-            </div>
-          </div>`;
-      });
+      // 已安装插件
+      if (data.plugins.length > 0) {
+        contentHtml += `<div class="eco-tool-name">已安装 (${data.plugins.length})</div>`;
+        data.plugins.forEach(p => {
+          const badges = [];
+          if (p.has_skills) badges.push(`<span class="eco-badge eco-badge-skill">${p.skill_count} skills</span>`);
+          if (p.has_mcp) badges.push('<span class="eco-badge eco-badge-mcp">MCP</span>');
+          const statusText = p.enabled ? "已启用" : "已禁用";
+          contentHtml += `
+            <div class="eco-plugin-card ${p.enabled ? '' : 'eco-plugin-disabled'}">
+              <div class="eco-plugin-header">
+                <span class="eco-plugin-name">${escapeHtml(p.name)}</span>
+                <span class="eco-plugin-version">v${escapeHtml(p.version)}</span>
+                <span class="eco-plugin-status">${statusText}</span>
+              </div>
+              <div class="eco-plugin-desc">${escapeHtml(p.description)}</div>
+              <div class="eco-plugin-meta">
+                <span>${escapeHtml(p.marketplace)}</span>
+                <span>${escapeHtml(p.installed_at)}</span>
+                ${badges.join("")}
+              </div>
+              <div class="eco-plugin-actions">
+                <button class="eco-plugin-btn" data-action="toggle" data-id="${escapeHtml(p.full_id)}" data-enabled="${p.enabled}">${p.enabled ? '禁用' : '启用'}</button>
+                <button class="eco-plugin-btn" data-action="update" data-id="${escapeHtml(p.full_id)}">更新</button>
+                <button class="eco-plugin-btn eco-plugin-btn-danger" data-action="uninstall" data-id="${escapeHtml(p.full_id)}">卸载</button>
+              </div>
+            </div>`;
+        });
+      }
+
+      // 可安装插件
+      if (data.available_plugins.length > 0) {
+        contentHtml += `<div class="eco-tool-name" style="margin-top:16px">可安装 (${data.available_plugins.length})</div>`;
+        data.available_plugins.forEach(p => {
+          contentHtml += `
+            <div class="eco-plugin-card eco-plugin-available">
+              <div class="eco-plugin-header">
+                <span class="eco-plugin-name">${escapeHtml(p.name)}</span>
+              </div>
+              <div class="eco-plugin-desc">${escapeHtml(p.description)}</div>
+              <div class="eco-plugin-actions">
+                <span class="eco-item-meta">${escapeHtml(p.marketplace)}</span>
+                <button class="eco-plugin-btn eco-plugin-btn-install" data-action="install" data-id="${escapeHtml(p.full_id)}">安装</button>
+              </div>
+            </div>`;
+        });
+      }
     }
   } else if (ecoTab === "skills") {
     if (data.skills.length === 0) {
@@ -372,8 +393,22 @@ function renderEcosystem(data) {
       });
     }
   } else if (ecoTab === "mcp") {
+    // 添加 MCP 服务器表单和触发按钮
+    contentHtml += `
+      <div class="eco-add-form" id="mcp-add-form" style="display:none">
+        <input class="eco-add-input" id="mcp-name" placeholder="名称 (如 github)" />
+        <input class="eco-add-input" id="mcp-command" placeholder="命令 (如 npx)" />
+        <input class="eco-add-input eco-add-input-wide" id="mcp-args" placeholder="参数 (空格分隔，如 -y @modelcontextprotocol/server-github)" />
+        <div class="eco-add-actions">
+          <button class="eco-plugin-btn eco-plugin-btn-install" id="mcp-save-btn">添加</button>
+          <button class="eco-plugin-btn" id="mcp-cancel-btn">取消</button>
+        </div>
+      </div>
+      <button class="eco-add-trigger" id="mcp-add-trigger">+ 添加 MCP 服务器</button>
+    `;
+
     if (data.mcp_servers.length === 0) {
-      contentHtml = '<div class="eco-empty">未检测到 MCP 服务器</div>';
+      contentHtml += '<div class="eco-empty">未检测到 MCP 服务器</div>';
     } else {
       const byTool = {};
       data.mcp_servers.forEach(s => {
@@ -447,11 +482,12 @@ function renderEcosystem(data) {
     });
   });
 
-  // 插件管理按钮事件
+  // 插件管理按钮事件（含安装）
   ecoPanel.querySelectorAll(".eco-plugin-btn").forEach(btn => {
     btn.addEventListener("click", async () => {
       const action = btn.dataset.action;
       const pluginId = btn.dataset.id;
+      if (!action || !pluginId) return;
       try {
         let msg = "";
         if (action === "toggle") {
@@ -462,12 +498,70 @@ function renderEcosystem(data) {
           msg = await invoke("plugin_update", { pluginId });
         } else if (action === "uninstall") {
           msg = await invoke("plugin_uninstall", { pluginId });
+        } else if (action === "install") {
+          showToast(`正在安装 ${pluginId}...`);
+          msg = await invoke("plugin_install", { pluginId });
         }
         showToast(msg);
         const freshData = await invoke("get_ecosystem");
         renderEcosystem(freshData);
       } catch (e) {
         showToast(String(e));
+      }
+    });
+  });
+
+  // MCP 添加服务器表单事件
+  const mcpAddTrigger = ecoPanel.querySelector("#mcp-add-trigger");
+  const mcpAddForm = ecoPanel.querySelector("#mcp-add-form");
+  if (mcpAddTrigger && mcpAddForm) {
+    mcpAddTrigger.addEventListener("click", () => {
+      mcpAddForm.style.display = "";
+      mcpAddTrigger.style.display = "none";
+      const nameInput = ecoPanel.querySelector("#mcp-name");
+      if (nameInput) nameInput.focus();
+    });
+
+    const mcpCancelBtn = ecoPanel.querySelector("#mcp-cancel-btn");
+    if (mcpCancelBtn) {
+      mcpCancelBtn.addEventListener("click", () => {
+        mcpAddForm.style.display = "none";
+        mcpAddTrigger.style.display = "";
+      });
+    }
+
+    const mcpSaveBtn = ecoPanel.querySelector("#mcp-save-btn");
+    if (mcpSaveBtn) {
+      mcpSaveBtn.addEventListener("click", async () => {
+        const name = (ecoPanel.querySelector("#mcp-name").value || "").trim();
+        const command = (ecoPanel.querySelector("#mcp-command").value || "").trim();
+        const argsStr = (ecoPanel.querySelector("#mcp-args").value || "").trim();
+        if (!name || !command) {
+          showToast("名称和命令不能为空");
+          return;
+        }
+        const args = argsStr ? argsStr.split(/\s+/) : [];
+        try {
+          await invoke("add_mcp_server_cmd", { name, command, args });
+          showToast(`MCP 服务器 ${name} 已添加`);
+          const freshData = await invoke("get_ecosystem");
+          renderEcosystem(freshData);
+        } catch (e) {
+          showToast("添加失败: " + e);
+        }
+      });
+    }
+  }
+
+  // MCP 添加表单内输入框阻止全局快捷键
+  ecoPanel.querySelectorAll(".eco-add-input").forEach(input => {
+    input.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Escape") {
+        const form = ecoPanel.querySelector("#mcp-add-form");
+        const trigger = ecoPanel.querySelector("#mcp-add-trigger");
+        if (form) form.style.display = "none";
+        if (trigger) trigger.style.display = "";
       }
     });
   });

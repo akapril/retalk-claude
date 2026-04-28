@@ -8,6 +8,16 @@ pub struct EcosystemData {
     pub mcp_servers: Vec<McpServerInfo>,
     pub configs: Vec<ToolConfig>,
     pub plugins: Vec<PluginInfo>,
+    pub available_plugins: Vec<AvailablePlugin>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct AvailablePlugin {
+    pub name: String,
+    pub marketplace: String,
+    pub description: String,
+    /// 完整标识符: name@marketplace，用于安装命令
+    pub full_id: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -81,11 +91,15 @@ pub fn scan_ecosystem() -> EcosystemData {
     // Claude Code 插件
     let plugins = scan_claude_plugins();
 
+    // 可安装插件（marketplace 中未安装的）
+    let available_plugins = scan_available_plugins(&plugins);
+
     EcosystemData {
         skills,
         mcp_servers,
         configs,
         plugins,
+        available_plugins,
     }
 }
 
@@ -721,4 +735,96 @@ fn scan_claude_plugins() -> Vec<PluginInfo> {
     // 按安装时间降序
     plugins.sort_by(|a, b| b.installed_at.cmp(&a.installed_at));
     plugins
+}
+
+/// 扫描 marketplace 目录中尚未安装的可用插件
+fn scan_available_plugins(installed: &[PluginInfo]) -> Vec<AvailablePlugin> {
+    let home = dirs::home_dir().unwrap_or_default();
+    let marketplaces_dir = home.join(".claude").join("plugins").join("marketplaces");
+    if !marketplaces_dir.exists() {
+        return Vec::new();
+    }
+
+    // 已安装插件的 full_id 集合，用于过滤
+    let installed_ids: std::collections::HashSet<String> = installed.iter().map(|p| p.full_id.clone()).collect();
+
+    let mut available = Vec::new();
+
+    let mp_entries = match fs::read_dir(&marketplaces_dir) {
+        Ok(e) => e,
+        Err(_) => return Vec::new(),
+    };
+
+    for mp_entry in mp_entries.flatten() {
+        let mp_path = mp_entry.path();
+        if !mp_path.is_dir() { continue; }
+        let mp_name = mp_path.file_name().unwrap_or_default().to_string_lossy().to_string();
+
+        // 扫描 plugins/ 和 external_plugins/ 子目录
+        for sub_dir in &["plugins", "external_plugins"] {
+            let dir = mp_path.join(sub_dir);
+            if !dir.exists() { continue; }
+
+            let entries = match fs::read_dir(&dir) {
+                Ok(e) => e,
+                Err(_) => continue,
+            };
+
+            for entry in entries.flatten() {
+                let plugin_path = entry.path();
+                if !plugin_path.is_dir() { continue; }
+                let plugin_name = plugin_path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                let full_id = format!("{}@{}", plugin_name, mp_name);
+
+                // 跳过已安装的
+                if installed_ids.contains(&full_id) { continue; }
+
+                // 尝试读取 plugin.json 获取描述
+                let description = [
+                    plugin_path.join(".claude-plugin").join("plugin.json"),
+                    plugin_path.join("plugin.json"),
+                ].iter()
+                    .find_map(|p| {
+                        fs::read_to_string(p).ok()
+                            .and_then(|c| serde_json::from_str::<serde_json::Value>(&c).ok())
+                            .and_then(|d| d.get("description").and_then(|v| v.as_str()).map(|s| s.to_string()))
+                    })
+                    .unwrap_or_default();
+
+                available.push(AvailablePlugin {
+                    name: plugin_name,
+                    marketplace: mp_name.clone(),
+                    description,
+                    full_id,
+                });
+            }
+        }
+    }
+
+    // 按名称排序
+    available.sort_by(|a, b| a.name.cmp(&b.name));
+    available
+}
+
+/// 向 Claude Code settings.json 添加 MCP 服务器配置
+pub fn add_mcp_server(name: &str, command: &str, args: &[String]) -> Result<(), String> {
+    let home = dirs::home_dir().ok_or("无法获取 home 目录")?;
+    let path = home.join(".claude").join("settings.json");
+    let content = fs::read_to_string(&path).unwrap_or_else(|_| "{}".to_string());
+    let mut data: serde_json::Value = serde_json::from_str(&content).map_err(|e| format!("解析 settings.json 失败: {}", e))?;
+
+    // 确保 mcpServers 字段存在
+    if data.get("mcpServers").is_none() {
+        data.as_object_mut().unwrap().insert("mcpServers".to_string(), serde_json::json!({}));
+    }
+
+    let servers = data.get_mut("mcpServers").unwrap().as_object_mut().unwrap();
+    servers.insert(name.to_string(), serde_json::json!({
+        "command": command,
+        "args": args
+    }));
+
+    let output = serde_json::to_string_pretty(&data).map_err(|e| format!("序列化失败: {}", e))?;
+    fs::write(&path, output).map_err(|e| format!("写入 settings.json 失败: {}", e))?;
+    Ok(())
 }
