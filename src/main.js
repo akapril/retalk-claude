@@ -4,11 +4,13 @@ const { getCurrentWindow } = window.__TAURI__.window;
 let sessions = [];
 let selectedIndex = 0;
 let currentQuery = "";
-let viewMode = "timeline";
+let viewMode = "project";
+let sortMode = "time"; // "time" | "name"
 
 const searchInput = document.getElementById("search-input");
 const sessionList = document.getElementById("session-list");
 const viewModeSelect = document.getElementById("view-mode");
+const sortModeSelect = document.getElementById("sort-mode");
 const appWindow = getCurrentWindow();
 
 async function init() {
@@ -30,6 +32,15 @@ async function loadSessions() {
   }
 }
 
+/// 按当前排序模式排序会话列表
+function sortSessions(list) {
+  if (sortMode === "name") {
+    return [...list].sort((a, b) => a.project_name.localeCompare(b.project_name));
+  }
+  // 默认按时间降序（后端已排好，但切换排序后需重排）
+  return [...list].sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+}
+
 function render() {
   sessionList.innerHTML = "";
   if (sessions.length === 0) {
@@ -44,7 +55,8 @@ function render() {
 }
 
 function renderTimeline() {
-  sessions.forEach((s, i) => {
+  const sorted = sortSessions(sessions);
+  sorted.forEach((s, i) => {
     sessionList.appendChild(createSessionItem(s, i));
   });
 }
@@ -57,13 +69,27 @@ function renderGrouped() {
     groups[key].push(s);
   });
 
+  // 对分组排序：按名称排序时按组名字母序，按时间排序时按组内最新会话时间降序
+  let sortedEntries = Object.entries(groups);
+  if (sortMode === "name") {
+    sortedEntries.sort(([a], [b]) => a.localeCompare(b));
+  } else {
+    sortedEntries.sort(([, a], [, b]) => {
+      const latestA = a.reduce((max, s) => s.updated_at > max ? s.updated_at : max, "");
+      const latestB = b.reduce((max, s) => s.updated_at > max ? s.updated_at : max, "");
+      return latestB.localeCompare(latestA);
+    });
+  }
+
+  // 组内会话也按当前排序
   let globalIdx = 0;
-  Object.entries(groups).forEach(([name, items]) => {
+  sortedEntries.forEach(([name, items]) => {
+    const sortedItems = sortSessions(items);
     const header = document.createElement("div");
     header.className = "group-header";
-    header.textContent = `${name} (${items.length})`;
+    header.textContent = `${name} (${sortedItems.length})`;
     sessionList.appendChild(header);
-    items.forEach((s) => {
+    sortedItems.forEach((s) => {
       sessionList.appendChild(createSessionItem(s, globalIdx));
       globalIdx++;
     });
@@ -106,6 +132,11 @@ searchInput.addEventListener("input", () => {
 
 viewModeSelect.addEventListener("change", () => {
   viewMode = viewModeSelect.value;
+  render();
+});
+
+sortModeSelect.addEventListener("change", () => {
+  sortMode = sortModeSelect.value;
   render();
 });
 
