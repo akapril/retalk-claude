@@ -9,6 +9,16 @@ pub struct EcosystemData {
     pub configs: Vec<ToolConfig>,
     pub plugins: Vec<PluginInfo>,
     pub available_plugins: Vec<AvailablePlugin>,
+    pub extensions: Vec<ExtensionInfo>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ExtensionInfo {
+    pub tool: String,      // "gemini"
+    pub name: String,
+    pub description: String,
+    pub enabled: bool,
+    pub source: String,    // 安装来源（git URL 或本地路径）
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -94,12 +104,16 @@ pub fn scan_ecosystem() -> EcosystemData {
     // 可安装插件（marketplace 中未安装的）
     let available_plugins = scan_available_plugins(&plugins);
 
+    // Gemini 扩展
+    let extensions = scan_gemini_extensions();
+
     EcosystemData {
         skills,
         mcp_servers,
         configs,
         plugins,
         available_plugins,
+        extensions,
     }
 }
 
@@ -804,6 +818,99 @@ fn scan_available_plugins(installed: &[PluginInfo]) -> Vec<AvailablePlugin> {
     // 按名称排序
     available.sort_by(|a, b| a.name.cmp(&b.name));
     available
+}
+
+/// 从配置文件中移除指定 MCP 服务器（支持 JSON 格式的 mcpServers / mcp 字段）
+pub fn remove_mcp_from_file(source_path: &str, server_name: &str) -> Result<(), String> {
+    let path = std::path::Path::new(source_path);
+    let content = fs::read_to_string(path).map_err(|e| format!("读取失败: {}", e))?;
+    let cleaned = strip_jsonc_comments(&content);
+    let mut data: serde_json::Value = serde_json::from_str(&cleaned).map_err(|e| format!("解析失败: {}", e))?;
+
+    // 尝试从 mcpServers 字段移除（Claude / Gemini 格式）
+    let mut removed = false;
+    if let Some(servers) = data.get_mut("mcpServers").and_then(|v| v.as_object_mut()) {
+        if servers.remove(server_name).is_some() {
+            removed = true;
+        }
+    }
+
+    // 尝试从 mcp 字段移除（OpenCode / Kilo 格式）
+    if !removed {
+        if let Some(servers) = data.get_mut("mcp").and_then(|v| v.as_object_mut()) {
+            if servers.remove(server_name).is_some() {
+                removed = true;
+            }
+        }
+    }
+
+    if !removed {
+        return Err(format!("未找到 MCP 服务器: {}", server_name));
+    }
+
+    let output = serde_json::to_string_pretty(&data).map_err(|e| format!("序列化失败: {}", e))?;
+    fs::write(path, output).map_err(|e| format!("写入失败: {}", e))?;
+    Ok(())
+}
+
+// ============================================================
+// Gemini 扩展扫描
+// ============================================================
+
+/// 扫描 Gemini CLI 已安装扩展
+fn scan_gemini_extensions() -> Vec<ExtensionInfo> {
+    let home = dirs::home_dir().unwrap_or_default();
+    let extensions_dir = home.join(".gemini").join("extensions");
+    if !extensions_dir.exists() {
+        return Vec::new();
+    }
+
+    let mut extensions = Vec::new();
+    if let Ok(entries) = fs::read_dir(&extensions_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() { continue; }
+            let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+
+            // 尝试读取扩展元信息（package.json 或 extension.json）
+            let description = [
+                path.join("package.json"),
+                path.join("extension.json"),
+            ].iter()
+                .find_map(|p| {
+                    fs::read_to_string(p).ok()
+                        .and_then(|c| serde_json::from_str::<serde_json::Value>(&c).ok())
+                        .and_then(|d| d.get("description").and_then(|v| v.as_str()).map(|s| s.to_string()))
+                })
+                .unwrap_or_default();
+
+            // 尝试判断是否有 source 信息
+            let source = [
+                path.join("package.json"),
+            ].iter()
+                .find_map(|p| {
+                    fs::read_to_string(p).ok()
+                        .and_then(|c| serde_json::from_str::<serde_json::Value>(&c).ok())
+                        .and_then(|d| {
+                            d.get("repository")
+                                .and_then(|v| v.as_str().map(|s| s.to_string())
+                                    .or_else(|| v.get("url").and_then(|u| u.as_str()).map(|s| s.to_string())))
+                        })
+                })
+                .unwrap_or_else(|| path.to_string_lossy().to_string());
+
+            extensions.push(ExtensionInfo {
+                tool: "gemini".to_string(),
+                name,
+                description,
+                enabled: true, // 存在即启用
+                source,
+            });
+        }
+    }
+
+    extensions.sort_by(|a, b| a.name.cmp(&b.name));
+    extensions
 }
 
 /// 向 Claude Code settings.json 添加 MCP 服务器配置

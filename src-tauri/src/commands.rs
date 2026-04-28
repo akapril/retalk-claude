@@ -712,6 +712,101 @@ pub fn add_mcp_server_cmd(name: String, command: String, args: Vec<String>) -> R
     crate::ecosystem::add_mcp_server(&name, &command, &args)
 }
 
+/// 移除 MCP 服务器（通用：根据 tool 分发到 CLI 或文件删除）
+#[tauri::command]
+pub fn remove_mcp_server(tool: String, name: String, source: String) -> Result<String, String> {
+    match tool.as_str() {
+        "codex" => codex_mcp_remove(name),
+        _ => {
+            // 从配置文件（settings.json / .mcp.json）中移除
+            crate::ecosystem::remove_mcp_from_file(&source, &name)?;
+            Ok(format!("{} 已移除", name))
+        }
+    }
+}
+
+// ============================================================
+// Codex MCP 管理 — 调用 codex mcp CLI
+// ============================================================
+
+/// 添加 Codex MCP 服务器（调用 codex mcp add CLI）
+#[tauri::command]
+pub fn codex_mcp_add(name: String, command: String, args: Vec<String>) -> Result<String, String> {
+    let mut cmd_args = vec!["mcp".to_string(), "add".to_string(), name.clone(), "--".to_string()];
+    cmd_args.push(command);
+    cmd_args.extend(args);
+    let output = silent_command("codex")
+        .args(&cmd_args)
+        .output()
+        .map_err(|e| format!("执行失败: {}", e))?;
+    if output.status.success() {
+        Ok(format!("Codex MCP {} 已添加", name))
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).to_string())
+    }
+}
+
+/// 移除 Codex MCP 服务器（调用 codex mcp remove CLI）
+#[tauri::command]
+pub fn codex_mcp_remove(name: String) -> Result<String, String> {
+    let output = silent_command("codex")
+        .args(["mcp", "remove", &name])
+        .output()
+        .map_err(|e| format!("执行失败: {}", e))?;
+    if output.status.success() {
+        Ok(format!("Codex MCP {} 已移除", name))
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).to_string())
+    }
+}
+
+// ============================================================
+// Gemini 扩展管理 — 调用 gemini extensions CLI
+// ============================================================
+
+/// 安装 Gemini 扩展
+#[tauri::command]
+pub fn gemini_ext_install(source: String) -> Result<String, String> {
+    let output = silent_command("gemini")
+        .args(["extensions", "install", &source])
+        .output()
+        .map_err(|e| format!("执行失败: {}", e))?;
+    if output.status.success() {
+        Ok("Gemini 扩展已安装".to_string())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).to_string())
+    }
+}
+
+/// 启用/禁用 Gemini 扩展
+#[tauri::command]
+pub fn gemini_ext_toggle(name: String, enabled: bool) -> Result<String, String> {
+    let action = if enabled { "enable" } else { "disable" };
+    let output = silent_command("gemini")
+        .args(["extensions", action, &name])
+        .output()
+        .map_err(|e| format!("执行失败: {}", e))?;
+    if output.status.success() {
+        Ok(format!("{} 已{}", name, if enabled { "启用" } else { "禁用" }))
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).to_string())
+    }
+}
+
+/// 卸载 Gemini 扩展
+#[tauri::command]
+pub fn gemini_ext_uninstall(name: String) -> Result<String, String> {
+    let output = silent_command("gemini")
+        .args(["extensions", "uninstall", &name])
+        .output()
+        .map_err(|e| format!("执行失败: {}", e))?;
+    if output.status.success() {
+        Ok(format!("{} 已卸载", name))
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).to_string())
+    }
+}
+
 #[tauri::command]
 pub fn plugin_update(plugin_id: String) -> Result<String, String> {
     let output = silent_command("claude")

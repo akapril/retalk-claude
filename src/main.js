@@ -369,6 +369,37 @@ function renderEcosystem(data) {
             </div>`;
         });
       }
+
+      // Gemini 扩展管理
+      contentHtml += `<div class="eco-tool-name" style="margin-top:16px">Gemini 扩展${data.extensions.length > 0 ? ' (' + data.extensions.length + ')' : ''}</div>`;
+      // 已安装的 Gemini 扩展
+      if (data.extensions.length > 0) {
+        data.extensions.forEach(ext => {
+          contentHtml += `
+            <div class="eco-plugin-card">
+              <div class="eco-plugin-header">
+                <span class="eco-plugin-name">${escapeHtml(ext.name)}</span>
+                <span class="eco-plugin-status">${ext.enabled ? '已启用' : '已禁用'}</span>
+              </div>
+              <div class="eco-plugin-desc">${escapeHtml(ext.description)}</div>
+              <div class="eco-plugin-actions">
+                <button class="eco-plugin-btn" data-action="gemini-ext-toggle" data-name="${escapeHtml(ext.name)}" data-enabled="${ext.enabled}">${ext.enabled ? '禁用' : '启用'}</button>
+                <button class="eco-plugin-btn eco-plugin-btn-danger" data-action="gemini-ext-uninstall" data-name="${escapeHtml(ext.name)}">卸载</button>
+              </div>
+            </div>`;
+        });
+      }
+      // 安装新 Gemini 扩展
+      contentHtml += `
+        <div class="eco-add-form" id="gemini-ext-form" style="display:none">
+          <input class="eco-add-input eco-add-input-wide" id="gemini-ext-source" placeholder="Git 仓库 URL 或本地路径" />
+          <div class="eco-add-actions">
+            <button class="eco-plugin-btn eco-plugin-btn-install" id="gemini-ext-install-btn">安装</button>
+            <button class="eco-plugin-btn" id="gemini-ext-cancel-btn">取消</button>
+          </div>
+        </div>
+        <button class="eco-add-trigger" id="gemini-ext-trigger">+ 安装 Gemini 扩展</button>
+      `;
     }
   } else if (ecoTab === "skills") {
     if (data.skills.length === 0) {
@@ -393,9 +424,14 @@ function renderEcosystem(data) {
       });
     }
   } else if (ecoTab === "mcp") {
-    // 添加 MCP 服务器表单和触发按钮
+    // 添加 MCP 服务器表单（带工具选择器）和触发按钮
     contentHtml += `
       <div class="eco-add-form" id="mcp-add-form" style="display:none">
+        <select class="eco-add-input" id="mcp-tool">
+          <option value="claude">Claude Code</option>
+          <option value="codex">Codex CLI</option>
+          <option value="gemini">Gemini CLI</option>
+        </select>
         <input class="eco-add-input" id="mcp-name" placeholder="名称 (如 github)" />
         <input class="eco-add-input" id="mcp-command" placeholder="命令 (如 npx)" />
         <input class="eco-add-input eco-add-input-wide" id="mcp-args" placeholder="参数 (空格分隔，如 -y @modelcontextprotocol/server-github)" />
@@ -425,6 +461,7 @@ function renderEcosystem(data) {
               <span class="eco-item-name">${escapeHtml(s.name)}</span>
               <span class="eco-item-desc" title="${escapeHtml(cmdStr)}">${escapeHtml(truncate(cmdStr, 40))}</span>
               <button class="eco-toggle ${toggleClass}" data-source="${escapeHtml(s.source)}" data-server="${escapeHtml(s.name)}" data-enabled="${s.enabled}" title="${s.enabled ? '已启用' : '已禁用'}"></button>
+              <button class="eco-plugin-btn eco-plugin-btn-danger eco-mcp-remove" data-tool="${escapeHtml(s.tool)}" data-name="${escapeHtml(s.name)}" data-source="${escapeHtml(s.source)}" title="移除">移除</button>
             </div>`;
         });
         contentHtml += `</div>`;
@@ -511,6 +548,67 @@ function renderEcosystem(data) {
     });
   });
 
+  // Gemini 扩展管理按钮事件（启用/禁用/卸载）
+  ecoPanel.querySelectorAll("[data-action^='gemini-ext-']").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const action = btn.dataset.action;
+      const name = btn.dataset.name;
+      if (!name) return;
+      try {
+        let msg = "";
+        if (action === "gemini-ext-toggle") {
+          const currentEnabled = btn.dataset.enabled === "true";
+          msg = await invoke("gemini_ext_toggle", { name, enabled: !currentEnabled });
+        } else if (action === "gemini-ext-uninstall") {
+          msg = await invoke("gemini_ext_uninstall", { name });
+        }
+        showToast(msg);
+        const freshData = await invoke("get_ecosystem");
+        renderEcosystem(freshData);
+      } catch (e) {
+        showToast(String(e));
+      }
+    });
+  });
+
+  // Gemini 扩展安装表单事件
+  const geminiExtTrigger = ecoPanel.querySelector("#gemini-ext-trigger");
+  const geminiExtForm = ecoPanel.querySelector("#gemini-ext-form");
+  if (geminiExtTrigger && geminiExtForm) {
+    geminiExtTrigger.addEventListener("click", () => {
+      geminiExtForm.style.display = "";
+      geminiExtTrigger.style.display = "none";
+      const srcInput = ecoPanel.querySelector("#gemini-ext-source");
+      if (srcInput) srcInput.focus();
+    });
+    const geminiExtCancelBtn = ecoPanel.querySelector("#gemini-ext-cancel-btn");
+    if (geminiExtCancelBtn) {
+      geminiExtCancelBtn.addEventListener("click", () => {
+        geminiExtForm.style.display = "none";
+        geminiExtTrigger.style.display = "";
+      });
+    }
+    const geminiExtInstallBtn = ecoPanel.querySelector("#gemini-ext-install-btn");
+    if (geminiExtInstallBtn) {
+      geminiExtInstallBtn.addEventListener("click", async () => {
+        const source = (ecoPanel.querySelector("#gemini-ext-source").value || "").trim();
+        if (!source) {
+          showToast("请输入扩展来源");
+          return;
+        }
+        try {
+          showToast("正在安装 Gemini 扩展...");
+          const msg = await invoke("gemini_ext_install", { source });
+          showToast(msg);
+          const freshData = await invoke("get_ecosystem");
+          renderEcosystem(freshData);
+        } catch (e) {
+          showToast("安装失败: " + e);
+        }
+      });
+    }
+  }
+
   // MCP 添加服务器表单事件
   const mcpAddTrigger = ecoPanel.querySelector("#mcp-add-trigger");
   const mcpAddForm = ecoPanel.querySelector("#mcp-add-form");
@@ -533,6 +631,7 @@ function renderEcosystem(data) {
     const mcpSaveBtn = ecoPanel.querySelector("#mcp-save-btn");
     if (mcpSaveBtn) {
       mcpSaveBtn.addEventListener("click", async () => {
+        const tool = (ecoPanel.querySelector("#mcp-tool").value || "claude");
         const name = (ecoPanel.querySelector("#mcp-name").value || "").trim();
         const command = (ecoPanel.querySelector("#mcp-command").value || "").trim();
         const argsStr = (ecoPanel.querySelector("#mcp-args").value || "").trim();
@@ -542,8 +641,14 @@ function renderEcosystem(data) {
         }
         const args = argsStr ? argsStr.split(/\s+/) : [];
         try {
-          await invoke("add_mcp_server_cmd", { name, command, args });
-          showToast(`MCP 服务器 ${name} 已添加`);
+          if (tool === "codex") {
+            // Codex 使用专用 CLI 命令添加
+            await invoke("codex_mcp_add", { name, command, args });
+          } else {
+            // Claude / Gemini 均写入 settings.json
+            await invoke("add_mcp_server_cmd", { name, command, args });
+          }
+          showToast(`MCP 服务器 ${name} 已添加到 ${tool}`);
           const freshData = await invoke("get_ecosystem");
           renderEcosystem(freshData);
         } catch (e) {
@@ -552,6 +657,23 @@ function renderEcosystem(data) {
       });
     }
   }
+
+  // MCP 移除按钮事件
+  ecoPanel.querySelectorAll(".eco-mcp-remove").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const tool = btn.dataset.tool;
+      const name = btn.dataset.name;
+      const source = btn.dataset.source;
+      try {
+        const msg = await invoke("remove_mcp_server", { tool, name, source });
+        showToast(msg);
+        const freshData = await invoke("get_ecosystem");
+        renderEcosystem(freshData);
+      } catch (e) {
+        showToast("移除失败: " + e);
+      }
+    });
+  });
 
   // MCP 添加表单内输入框阻止全局快捷键
   ecoPanel.querySelectorAll(".eco-add-input").forEach(input => {

@@ -1024,3 +1024,5 @@ html, body {
 .eco-add-input:focus { border-color: var(--text-highlight); }
 .eco-add-input-wide { width: 100%; }
 .eco-add-actions { display: flex; gap: 6px; justify-content: flex-end; }
+select.eco-add-input { cursor: pointer; }
+.eco-mcp-remove { margin-left: 6px; padding: 1px 6px !important; font-size: 10px !important; flex-shrink: 0; }
