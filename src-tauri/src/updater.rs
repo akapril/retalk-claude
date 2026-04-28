@@ -29,6 +29,15 @@ impl Updater {
         self.stats.lock().clone()
     }
 
+    /// 初始化 mtime 快照，防止首次 on_demand_refresh 误判为"有变化"
+    pub fn init_mtime_snapshot(&self) {
+        let history_path = claude_dir().join("history.jsonl");
+        let mtime = std::fs::metadata(&history_path)
+            .and_then(|m| m.modified())
+            .ok();
+        *self.last_history_mtime.lock() = mtime;
+    }
+
     /// 策略 1：文件系统监听（debouncer 去抖动后触发索引更新）
     pub fn start_watcher(
         &self,

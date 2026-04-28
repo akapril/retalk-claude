@@ -69,6 +69,7 @@ pub fn run() {
         eprintln!("[retalk] 扫描完成，共 {} 条会话，开始建索引...", sessions.len());
         let _ = bg_index.lock().rebuild(&sessions);
         *bg_sessions.lock() = sessions;
+        bg_updater.init_mtime_snapshot(); // 防止首次 on_demand_refresh 重复扫描
         bg_ready.store(true, std::sync::atomic::Ordering::Relaxed);
         eprintln!("[retalk] 索引建立完成，数据就绪");
 
