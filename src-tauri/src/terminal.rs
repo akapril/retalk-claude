@@ -44,6 +44,7 @@ pub fn build_resume_command(provider: &str, project_path: &str, session_id: &str
     let resume_cmd = match provider {
         "claude" => format!("claude --resume {}", session_id),
         "codex" => format!("codex resume {}", session_id),
+        "gemini" => format!("gemini --resume {}", session_id),
         _ => String::new(),
     };
     if resume_cmd.is_empty() {
@@ -69,6 +70,7 @@ pub fn resume_in_terminal(
     let tool_cmd = match provider {
         "claude" => format!("claude --resume {}", session_id),
         "codex" => format!("codex resume {}", session_id),
+        "gemini" => format!("gemini --resume {}", session_id),
         _ => String::new(),
     };
 
