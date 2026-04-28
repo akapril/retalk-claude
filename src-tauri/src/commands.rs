@@ -1,6 +1,6 @@
 use crate::config;
 use crate::indexer::SessionIndex;
-use crate::models::{AppConfig, GitInfo, Session, TagsMap, UpdateStats};
+use crate::models::{AppConfig, GitInfo, ProviderInfo, Session, TagsMap, UpdateStats};
 use crate::searcher::{self, SearchResult};
 use crate::terminal;
 use crate::updater::Updater;
@@ -384,4 +384,182 @@ pub fn set_tags(
 #[tauri::command]
 pub fn get_all_tags(state: State<AppState>) -> TagsMap {
     state.tags.lock().clone()
+}
+
+// ============================================================
+// Feature 1: 空状态引导 — 返回各 provider 的可用状态
+// ============================================================
+
+#[tauri::command]
+pub fn get_provider_status() -> Vec<ProviderInfo> {
+    use crate::providers;
+    let all: Vec<Box<dyn providers::SessionProvider>> = vec![
+        Box::new(providers::claude::ClaudeProvider),
+        Box::new(providers::codex::CodexProvider),
+        Box::new(providers::gemini::GeminiProvider),
+        Box::new(providers::opencode::OpenCodeProvider),
+        Box::new(providers::kilo::KiloProvider),
+    ];
+    all.iter()
+        .map(|p| ProviderInfo {
+            name: p.name().to_string(),
+            available: p.is_available(),
+        })
+        .collect()
+}
+
+// ============================================================
+// Feature 6: 批量导出 — 合并多个会话为 Markdown
+// ============================================================
+
+#[tauri::command]
+pub fn batch_export_markdown(
+    state: State<AppState>,
+    session_ids: Vec<String>,
+) -> Result<String, String> {
+    let sessions = state.sessions.lock();
+    let mut md = String::new();
+
+    for sid in &session_ids {
+        if let Some(session) = sessions.iter().find(|s| s.session_id == *sid) {
+            md += &format!("# {} - {}\n\n", session.project_name, session.provider);
+            md += &format!("**项目路径:** {}\n", session.project_path);
+            md += &format!("**会话ID:** {}\n", session.session_id);
+            md += &format!("**消息数:** {}\n", session.message_count);
+            if session.total_tokens > 0 {
+                md += &format!("**Token 数:** {}\n", session.total_tokens);
+            }
+            md += "\n---\n\n";
+            for (i, msg) in session.user_messages.iter().enumerate() {
+                md += &format!("### 消息 {}\n\n{}\n\n", i + 1, msg);
+            }
+            md += "\n---\n\n";
+        }
+    }
+
+    if md.is_empty() {
+        return Err("未找到任何匹配的会话".to_string());
+    }
+    Ok(md)
+}
+
+// ============================================================
+// Feature 7: 自动标签 — 根据首条消息关键词自动打标
+// ============================================================
+
+#[tauri::command]
+pub fn auto_tag_sessions(state: State<AppState>) -> u32 {
+    let sessions = state.sessions.lock();
+    let mut tags = state.tags.lock();
+    let mut count = 0;
+
+    for session in sessions.iter() {
+        // 已有标签的跳过
+        if tags.contains_key(&session.session_id) {
+            continue;
+        }
+
+        let text = session.first_prompt.to_lowercase();
+        let mut auto_tags = Vec::new();
+
+        if text.contains("bug")
+            || text.contains("fix")
+            || text.contains("error")
+            || text.contains("修复")
+            || text.contains("报错")
+        {
+            auto_tags.push("bug修复".to_string());
+        }
+        if text.contains("refactor")
+            || text.contains("重构")
+            || text.contains("优化")
+            || text.contains("cleanup")
+        {
+            auto_tags.push("重构".to_string());
+        }
+        if text.contains("add")
+            || text.contains("new")
+            || text.contains("feature")
+            || text.contains("新增")
+            || text.contains("添加")
+            || text.contains("实现")
+        {
+            auto_tags.push("新功能".to_string());
+        }
+        if text.contains("test") || text.contains("测试") {
+            auto_tags.push("测试".to_string());
+        }
+        if text.contains("deploy")
+            || text.contains("部署")
+            || text.contains("build")
+            || text.contains("打包")
+        {
+            auto_tags.push("部署".to_string());
+        }
+        if text.contains("doc") || text.contains("文档") || text.contains("readme") {
+            auto_tags.push("文档".to_string());
+        }
+
+        if !auto_tags.is_empty() {
+            tags.insert(session.session_id.clone(), auto_tags);
+            count += 1;
+        }
+    }
+
+    save_tags(&tags);
+    count
+}
+
+// ============================================================
+// Feature 8: 开机自启 — Windows 注册表操作
+// ============================================================
+
+#[tauri::command]
+pub fn set_autostart(enabled: bool) -> Result<(), String> {
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let exe_path = exe.to_string_lossy().to_string();
+
+    if enabled {
+        // 添加到 HKCU\Software\Microsoft\Windows\CurrentVersion\Run
+        Command::new("reg")
+            .args([
+                "add",
+                "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+                "/v",
+                "retalk",
+                "/t",
+                "REG_SZ",
+                "/d",
+                &exe_path,
+                "/f",
+            ])
+            .output()
+            .map_err(|e| e.to_string())?;
+    } else {
+        Command::new("reg")
+            .args([
+                "delete",
+                "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+                "/v",
+                "retalk",
+                "/f",
+            ])
+            .output()
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_autostart() -> bool {
+    Command::new("reg")
+        .args([
+            "query",
+            "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+            "/v",
+            "retalk",
+        ])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
 }

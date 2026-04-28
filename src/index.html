@@ -60,6 +60,7 @@
       <div class="ctx-item" data-action="copy-cmd">复制恢复命令</div>
       <div class="ctx-item" data-action="export-md">导出 Markdown</div>
       <div class="ctx-item" data-action="export-file">导出到文件</div>
+      <div class="ctx-item" data-action="compare">对比工具</div>
     </div>
     <!-- 统计视图 -->
     <div id="stats-panel" class="stats-panel" style="display:none"></div>
@@ -109,12 +110,26 @@
           <input type="number" id="cfg-max-results" class="settings-input settings-input-sm" min="10" max="500" />
         </div>
       </div>
+      <div class="settings-section">
+        <div class="settings-title">启动</div>
+        <div class="settings-row">
+          <label>开机自启动</label>
+          <input type="checkbox" id="cfg-autostart" />
+        </div>
+      </div>
+      <div class="settings-section">
+        <div class="settings-title">标签</div>
+        <div class="settings-row">
+          <label>自动识别标签</label>
+          <button id="auto-tag-btn" class="settings-btn-primary">执行</button>
+        </div>
+      </div>
       <div class="settings-actions">
         <button id="settings-save" class="settings-btn-primary">保存</button>
         <button id="settings-cancel" class="settings-btn">取消</button>
       </div>
     </div>
-    <div class="status-bar">
+    <div class="status-bar" id="status-bar">
       <span>↑↓ 导航</span>
       <span>Enter 恢复</span>
       <span>Ctrl+C 复制命令</span>

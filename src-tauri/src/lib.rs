@@ -178,6 +178,11 @@ pub fn run() {
             commands::get_desktop_path,
             commands::open_in_explorer_select,
             commands::is_ready,
+            commands::get_provider_status,
+            commands::batch_export_markdown,
+            commands::auto_tag_sessions,
+            commands::set_autostart,
+            commands::get_autostart,
         ])
         .run(tauri::generate_context!())
         .expect("启动 retalk 失败");

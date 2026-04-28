@@ -14,6 +14,10 @@ let allTags = {};          // Feature 6: session_id -> [tag1, tag2]
 let gitInfoCache = {};     // Feature 2: project_path -> { branch, dirty_count }
 let statsOpen = false;     // Feature 5: 统计面板状态
 let contextSession = null; // Feature 4: 右键菜单关联的会话
+let compareOpen = false;   // Feature 5(会话对比): 对比视图状态
+let multiSelectMode = false; // Feature 6(批量操作): 多选模式
+let multiSelected = new Set(); // Feature 6: 已选会话 ID 集合
+let providerStatus = [];   // Feature 1(空状态引导): provider 可用状态
 
 const searchInput = document.getElementById("search-input");
 const sessionList = document.getElementById("session-list");
@@ -27,6 +31,7 @@ const statsPanel = document.getElementById("stats-panel");
 const ddProvider = document.getElementById("dd-provider");
 const ddView = document.getElementById("dd-view");
 const ddSort = document.getElementById("dd-sort");
+const statusBar = document.getElementById("status-bar");
 const appWindow = getCurrentWindow();
 
 let settingsOpen = false;
@@ -96,6 +101,10 @@ async function init() {
   try {
     allTags = await invoke("get_all_tags");
   } catch (_) { /* 忽略 */ }
+  // 加载 provider 状态（空状态引导用）
+  try {
+    providerStatus = await invoke("get_provider_status");
+  } catch (_) { /* 忽略 */ }
 
   // 等待后台扫描完成再加载数据
   await waitForReady();
@@ -134,6 +143,8 @@ async function openSettings() {
   settingsPanel.style.display = "";
   statsPanel.style.display = "none";
   statsOpen = false;
+  compareOpen = false;
+  updateStatusBar();
 
   try {
     const config = await invoke("get_config");
@@ -147,6 +158,11 @@ async function openSettings() {
   } catch (e) {
     console.error("加载配置失败:", e);
   }
+
+  // Feature 8: 加载开机自启状态
+  try {
+    document.getElementById("cfg-autostart").checked = await invoke("get_autostart");
+  } catch (_) { /* 忽略 */ }
 }
 
 function closeSettings() {
@@ -154,6 +170,7 @@ function closeSettings() {
   settingsPanel.style.display = "none";
   sessionList.style.display = "";
   searchInput.focus();
+  updateStatusBar();
 }
 
 document.getElementById("settings-cancel").addEventListener("click", closeSettings);
@@ -180,6 +197,9 @@ document.getElementById("settings-save").addEventListener("click", async () => {
 
   try {
     await invoke("save_config", { newConfig });
+    // Feature 8: 保存开机自启状态
+    const autostart = document.getElementById("cfg-autostart").checked;
+    await invoke("set_autostart", { enabled: autostart });
     closeSettings();
     await loadSessions();
   } catch (e) {
@@ -199,11 +219,13 @@ statsBtn.addEventListener("click", () => {
 function openStats() {
   statsOpen = true;
   settingsOpen = false;
+  compareOpen = false;
   sessionList.style.display = "none";
   previewPanel.style.display = "none";
   settingsPanel.style.display = "none";
   statsPanel.style.display = "";
   renderStats();
+  updateStatusBar();
 }
 
 function closeStats() {
@@ -211,6 +233,7 @@ function closeStats() {
   statsPanel.style.display = "none";
   sessionList.style.display = "";
   searchInput.focus();
+  updateStatusBar();
 }
 
 function renderStats() {
@@ -240,6 +263,54 @@ function renderStats() {
   // 月份排序
   const months = Object.entries(byMonth).sort((a, b) => a[0].localeCompare(b[0]));
   const maxMonthCount = months.length > 0 ? Math.max(...months.map((m) => m[1])) : 1;
+
+  // Feature 10: 项目健康度 — 频繁活动 vs 长期未活动
+  const now = new Date();
+  const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+  // 解析 updated_at（"MM-DD HH:MM" 格式）为当前年份的 Date
+  function parseSessionDate(dateStr) {
+    if (!dateStr || dateStr.length < 11) return null;
+    const month = parseInt(dateStr.substring(0, 2), 10);
+    const day = parseInt(dateStr.substring(3, 5), 10);
+    const hour = parseInt(dateStr.substring(6, 8), 10);
+    const min = parseInt(dateStr.substring(9, 11), 10);
+    if (isNaN(month) || isNaN(day)) return null;
+    return new Date(now.getFullYear(), month - 1, day, hour || 0, min || 0);
+  }
+
+  // 按项目分组统计本周 vs 上周
+  const projectThisWeek = {};
+  const projectLastWeek = {};
+  const projectLatest = {}; // 项目最近会话日期
+  sessions.forEach((s) => {
+    const pName = s.project_name || "未知项目";
+    const d = parseSessionDate(s.updated_at);
+    if (!d) return;
+    // 记录最新日期
+    if (!projectLatest[pName] || d > projectLatest[pName]) {
+      projectLatest[pName] = d;
+    }
+    if (d >= oneWeekAgo) {
+      projectThisWeek[pName] = (projectThisWeek[pName] || 0) + 1;
+    } else if (d >= twoWeeksAgo) {
+      projectLastWeek[pName] = (projectLastWeek[pName] || 0) + 1;
+    }
+  });
+
+  // 频繁活动项目：本周会话数 > 上周
+  const hotProjects = Object.entries(projectThisWeek)
+    .filter(([name, cnt]) => cnt > (projectLastWeek[name] || 0))
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
+
+  // 长期未活动：所有会话都超过 30 天
+  const coldProjects = Object.entries(projectLatest)
+    .filter(([, d]) => d < thirtyDaysAgo)
+    .map(([name]) => name)
+    .slice(0, 5);
 
   let html = `
     <div class="stats-section">
@@ -280,6 +351,22 @@ function renderStats() {
         .join("")}
     </div>
   `;
+
+  // Feature 10: 项目健康度
+  if (hotProjects.length > 0 || coldProjects.length > 0) {
+    html += `<div class="stats-section"><div class="stats-section-title">项目健康度</div>`;
+    if (hotProjects.length > 0) {
+      html += hotProjects.map(([name, cnt]) =>
+        `<div class="stats-row"><span class="label">${escapeHtml(name)}<span class="stats-tag stats-tag-hot">本周 ${cnt} 次</span></span><span class="value">频繁活动</span></div>`
+      ).join("");
+    }
+    if (coldProjects.length > 0) {
+      html += coldProjects.map((name) =>
+        `<div class="stats-row"><span class="label">${escapeHtml(name)}<span class="stats-tag stats-tag-cold">30+ 天未活动</span></span><span class="value">休眠</span></div>`
+      ).join("");
+    }
+    html += `</div>`;
+  }
 
   statsPanel.innerHTML = html;
 }
@@ -340,8 +427,21 @@ function render() {
   sessionList.innerHTML = "";
   const list = applyFavoriteSort(filteredSessions());
   if (list.length === 0) {
-    sessionList.innerHTML = '<div class="empty-state">没有找到会话</div>';
+    // Feature 1: 空状态引导 — 区分不同原因
+    const hasProviders = providerStatus.some((p) => p.available);
+    if (currentQuery.trim()) {
+      sessionList.innerHTML = '<div class="empty-state">没有找到匹配的会话</div>';
+    } else if (!hasProviders && providerStatus.length > 0) {
+      const names = providerStatus.map((p) => p.name).join(", ");
+      sessionList.innerHTML = `<div class="empty-state-detail">
+        <div>未检测到 AI 编码工具</div>
+        <div class="providers-list">支持: ${escapeHtml(names)}</div>
+      </div>`;
+    } else {
+      sessionList.innerHTML = '<div class="empty-state">已扫描完成，暂无会话记录</div>';
+    }
     previewPanel.style.display = "none";
+    updateStatusBar();
     return;
   }
   if (viewMode === "project") {
@@ -349,8 +449,9 @@ function render() {
   } else {
     renderTimeline(list);
   }
-  // 更新预览
+  // 更新预览和状态栏
   updatePreview();
+  updateStatusBar();
 }
 
 function renderTimeline(list) {
@@ -359,9 +460,39 @@ function renderTimeline(list) {
   const favItems = sortSessions(list.filter((s) => favSet.has(s.session_id)));
   const normalItems = sortSessions(list.filter((s) => !favSet.has(s.session_id)));
   const sorted = [...favItems, ...normalItems];
+
+  // Feature 3: 时间分组
+  let lastGroup = "";
   sorted.forEach((s, i) => {
+    const group = getTimeGroup(s.updated_at);
+    if (group !== lastGroup) {
+      const header = document.createElement("div");
+      header.className = "group-header";
+      header.textContent = group;
+      sessionList.appendChild(header);
+      lastGroup = group;
+    }
     sessionList.appendChild(createSessionItem(s, i));
   });
+}
+
+/// Feature 3: 根据日期字符串返回时间分组标签
+function getTimeGroup(dateStr) {
+  if (!dateStr || dateStr.length < 11) return "更早";
+  const now = new Date();
+  const month = parseInt(dateStr.substring(0, 2), 10);
+  const day = parseInt(dateStr.substring(3, 5), 10);
+  if (isNaN(month) || isNaN(day)) return "更早";
+
+  const sessionDate = new Date(now.getFullYear(), month - 1, day);
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diffDays = Math.floor((today - sessionDate) / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) return "今天";
+  if (diffDays === 1) return "昨天";
+  if (diffDays < 7) return "本周";
+  if (diffDays < 30) return "本月";
+  return "更早";
 }
 
 function renderGrouped(list) {
@@ -403,7 +534,8 @@ function renderGrouped(list) {
 
 function createSessionItem(session, index) {
   const item = document.createElement("div");
-  item.className = "session-item" + (index === selectedIndex ? " selected" : "");
+  const isMultiSel = multiSelected.has(session.session_id);
+  item.className = "session-item" + (index === selectedIndex ? " selected" : "") + (isMultiSel ? " multi-selected" : "");
   item.dataset.index = index;
   item.dataset.sessionId = session.session_id;
 
@@ -411,6 +543,11 @@ function createSessionItem(session, index) {
   const promptText = session.last_prompt || session.first_prompt || "";
   const displayPrompt = highlightMatch(truncate(promptText, 80), currentQuery);
   const providerBadge = `<span class="provider-badge provider-${session.provider}">${session.provider}</span>`;
+
+  // Feature 6(批量): 多选复选框
+  const checkboxHtml = multiSelectMode
+    ? `<input type="checkbox" class="multi-select-checkbox" ${isMultiSel ? "checked" : ""} data-sid="${session.session_id}" />`
+    : "";
 
   // Feature 3: 收藏按钮
   const favBtnHtml = `<button class="fav-btn ${isFav ? "favorited" : ""}" data-sid="${session.session_id}" title="收藏">${isFav ? "★" : "☆"}</button>`;
@@ -448,21 +585,42 @@ function createSessionItem(session, index) {
 
   item.innerHTML = `
     <div class="header">
-      <span class="project-info">${favBtnHtml}${providerBadge}<span class="project-name">${escapeHtml(session.project_name)}</span>${gitHtml}</span>
+      <span class="project-info">${checkboxHtml}${favBtnHtml}${providerBadge}<span class="project-name">${escapeHtml(session.project_name)}</span>${gitHtml}</span>
       <span class="meta-right">${tokenHtml}<span class="time">${escapeHtml(session.updated_at)}</span></span>
     </div>
     <div class="prompt">${displayPrompt}</div>
     ${tagsHtml}
   `;
 
-  // 点击恢复会话
+  // 点击恢复会话 / Ctrl+Click 多选
   item.addEventListener("click", (e) => {
-    // 不在星标/标签按钮上触发
-    if (e.target.closest(".fav-btn") || e.target.closest(".tag-add-btn") || e.target.closest(".tag-pill")) return;
+    // 不在星标/标签按钮/复选框上触发
+    if (e.target.closest(".fav-btn") || e.target.closest(".tag-add-btn") || e.target.closest(".tag-pill") || e.target.closest(".multi-select-checkbox")) return;
+
+    // Feature 6: Ctrl+Click 进入多选模式
+    if (e.ctrlKey) {
+      toggleMultiSelect(session.session_id);
+      return;
+    }
+
+    if (multiSelectMode) {
+      toggleMultiSelect(session.session_id);
+      return;
+    }
+
     selectedIndex = index;
     render();
     resumeSession(session);
   });
+
+  // Feature 6: 复选框点击
+  const checkbox = item.querySelector(".multi-select-checkbox");
+  if (checkbox) {
+    checkbox.addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggleMultiSelect(session.session_id);
+    });
+  }
 
   // Feature 4: 右键菜单
   item.addEventListener("contextmenu", (e) => {
@@ -527,7 +685,7 @@ function updatePreview() {
         return;
       }
       previewMessages.innerHTML = msgs
-        .map((m) => `<div class="preview-msg">${escapeHtml(truncate(m, 120))}</div>`)
+        .map((m) => `<div class="preview-msg">${highlightMatch(truncate(m, 120), currentQuery)}</div>`)
         .join("");
       if (!settingsOpen && !statsOpen) {
         previewPanel.style.display = "";
@@ -666,6 +824,9 @@ contextMenu.querySelectorAll(".ctx-item").forEach((item) => {
           showToast("导出失败: " + e);
         }
         break;
+      case "compare":
+        openCompareView(s);
+        break;
     }
   });
 });
@@ -775,10 +936,19 @@ document.addEventListener("keydown", async (e) => {
   } else if (e.key === "Escape") {
     if (contextMenu.style.display !== "none") {
       hideContextMenu();
+    } else if (multiSelectMode) {
+      exitMultiSelect();
+    } else if (compareOpen) {
+      closeCompareView();
     } else if (settingsOpen) {
       closeSettings();
     } else if (statsOpen) {
       closeStats();
+    } else if (currentQuery.trim()) {
+      // Feature 2(动态状态栏): 搜索模式按 Esc 清空搜索
+      searchInput.value = "";
+      currentQuery = "";
+      loadSessions();
     } else {
       await appWindow.hide();
     }
@@ -888,6 +1058,190 @@ function showToast(message) {
   toast.classList.add("show");
   setTimeout(() => toast.classList.remove("show"), 2000);
 }
+
+// ======================== Feature 2: 动态 Status Bar ========================
+
+function updateStatusBar() {
+  if (!statusBar) return;
+  if (multiSelectMode) {
+    statusBar.innerHTML = `<span>已选 ${multiSelected.size} 项</span><span>Esc 取消</span>`;
+    return;
+  }
+  if (settingsOpen) {
+    statusBar.innerHTML = `<span>Esc 返回</span>`;
+    return;
+  }
+  if (statsOpen) {
+    statusBar.innerHTML = `<span>Esc 返回</span>`;
+    return;
+  }
+  if (compareOpen) {
+    statusBar.innerHTML = `<span>Esc 返回</span>`;
+    return;
+  }
+  if (currentQuery.trim()) {
+    statusBar.innerHTML = `<span>Enter 恢复</span><span>Esc 清空搜索</span>`;
+    return;
+  }
+  statusBar.innerHTML = `<span>↑↓ 导航</span><span>Enter 恢复</span><span>Ctrl+C 复制命令</span><span>Esc 关闭</span>`;
+}
+
+// ======================== Feature 5: 会话对比视图 ========================
+
+function openCompareView(session) {
+  // 找到同项目不同 provider 的所有会话
+  const projectPath = session.project_path;
+  const projectSessions = sessions.filter((s) => s.project_path === projectPath);
+
+  // 按 provider 分组
+  const byProvider = {};
+  projectSessions.forEach((s) => {
+    if (!byProvider[s.provider]) byProvider[s.provider] = [];
+    byProvider[s.provider].push(s);
+  });
+
+  const providers = Object.keys(byProvider);
+  if (providers.length < 2) {
+    showToast("该项目仅有一个工具的会话，无需对比");
+    return;
+  }
+
+  compareOpen = true;
+  sessionList.style.display = "none";
+  previewPanel.style.display = "none";
+  settingsPanel.style.display = "none";
+  statsPanel.style.display = "none";
+
+  // 创建/复用对比容器
+  let compareEl = document.getElementById("compare-view");
+  if (!compareEl) {
+    compareEl = document.createElement("div");
+    compareEl.id = "compare-view";
+    compareEl.className = "compare-view";
+    sessionList.parentNode.insertBefore(compareEl, previewPanel);
+  }
+  compareEl.style.display = "";
+
+  let html = `
+    <div class="compare-header">
+      <span class="project-title">${escapeHtml(session.project_name)}</span>
+      <button class="compare-back-btn" id="compare-back">返回</button>
+    </div>
+    <div class="compare-grid">
+  `;
+
+  providers.forEach((prov) => {
+    const pSessions = byProvider[prov];
+    const latest = pSessions.reduce((a, b) => (a.updated_at > b.updated_at ? a : b));
+    const msgs = latest.user_messages || [];
+    const previewMsgs = msgs.slice(-3);
+
+    html += `
+      <div class="compare-column">
+        <div class="compare-provider">
+          <span class="provider-badge provider-${prov}">${escapeHtml(prov)}</span>
+          (${pSessions.length} 次)
+        </div>
+        <div class="compare-meta">最近: ${escapeHtml(latest.updated_at)}</div>
+        ${previewMsgs.map((m) => `<div class="compare-msg">${escapeHtml(truncate(m, 60))}</div>`).join("")}
+      </div>
+    `;
+  });
+
+  html += `</div>`;
+  compareEl.innerHTML = html;
+
+  document.getElementById("compare-back").addEventListener("click", closeCompareView);
+  updateStatusBar();
+}
+
+function closeCompareView() {
+  compareOpen = false;
+  const compareEl = document.getElementById("compare-view");
+  if (compareEl) compareEl.style.display = "none";
+  sessionList.style.display = "";
+  searchInput.focus();
+  updateStatusBar();
+}
+
+// ======================== Feature 6: 批量操作 ========================
+
+function toggleMultiSelect(sessionId) {
+  if (!multiSelectMode) {
+    multiSelectMode = true;
+  }
+  if (multiSelected.has(sessionId)) {
+    multiSelected.delete(sessionId);
+  } else {
+    multiSelected.add(sessionId);
+  }
+  if (multiSelected.size === 0) {
+    exitMultiSelect();
+    return;
+  }
+  render();
+  showMultiBar();
+}
+
+function exitMultiSelect() {
+  multiSelectMode = false;
+  multiSelected.clear();
+  hideMultiBar();
+  render();
+}
+
+function showMultiBar() {
+  let bar = document.getElementById("multi-bar");
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "multi-bar";
+    bar.className = "multi-bar";
+    // 插入到 status-bar 前面
+    statusBar.parentNode.insertBefore(bar, statusBar);
+  }
+  bar.innerHTML = `
+    <span>已选 ${multiSelected.size} 项</span>
+    <button class="multi-bar-btn primary" id="multi-export">导出</button>
+    <button class="multi-bar-btn" id="multi-cancel">取消</button>
+  `;
+  bar.style.display = "";
+
+  document.getElementById("multi-export").addEventListener("click", async () => {
+    try {
+      const ids = Array.from(multiSelected);
+      const md = await invoke("batch_export_markdown", { sessionIds: ids });
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(md);
+        showToast(`已导出 ${ids.length} 个会话到剪贴板`);
+      }
+    } catch (e) {
+      showToast("批量导出失败: " + e);
+    }
+    exitMultiSelect();
+  });
+
+  document.getElementById("multi-cancel").addEventListener("click", exitMultiSelect);
+  updateStatusBar();
+}
+
+function hideMultiBar() {
+  const bar = document.getElementById("multi-bar");
+  if (bar) bar.style.display = "none";
+  updateStatusBar();
+}
+
+// ======================== Feature 7: 自动标签按钮 ========================
+
+document.getElementById("auto-tag-btn").addEventListener("click", async () => {
+  try {
+    const count = await invoke("auto_tag_sessions");
+    allTags = await invoke("get_all_tags");
+    showToast(`自动标签完成，新增 ${count} 个会话标签`);
+    render();
+  } catch (e) {
+    showToast("自动标签失败: " + e);
+  }
+});
 
 // 窗口可见时刷新
 document.addEventListener("visibilitychange", () => {

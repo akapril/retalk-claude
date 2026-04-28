@@ -112,6 +112,13 @@ pub struct GitInfo {
 /// 会话标签存储：session_id -> [tag1, tag2, ...]
 pub type TagsMap = HashMap<String, Vec<String>>;
 
+/// Provider 可用状态信息（Feature 1: 空状态引导）
+#[derive(Debug, Clone, Serialize)]
+pub struct ProviderInfo {
+    pub name: String,
+    pub available: bool,
+}
+
 /// 更新策略性能统计
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateStats {
