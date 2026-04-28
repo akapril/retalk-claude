@@ -4,6 +4,7 @@ pub mod codex;
 pub mod continue_dev;
 pub mod cursor;
 pub mod gemini;
+pub mod opencode;
 
 use crate::models::Session;
 
@@ -26,6 +27,7 @@ pub fn all_providers() -> Vec<Box<dyn SessionProvider>> {
         Box::new(continue_dev::ContinueProvider),
         Box::new(aider::AiderProvider),
         Box::new(cursor::CursorProvider),
+        Box::new(opencode::OpenCodeProvider),
     ];
     providers.into_iter().filter(|p| p.is_available()).collect()
 }

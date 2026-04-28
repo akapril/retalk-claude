@@ -188,6 +188,11 @@ html, body {
   color: #3b82f6;
 }
 
+.provider-opencode {
+  background: rgba(249, 115, 22, 0.3);
+  color: #f97316;
+}
+
 .session-item .project-name {
   font-weight: 600;
   color: var(--text-highlight);
