@@ -216,6 +216,82 @@ impl SessionIndex {
         Ok(())
     }
 
+    /// 索引中的文档数
+    pub fn doc_count(&self) -> u64 {
+        self.reader.searcher().num_docs()
+    }
+
+    /// 增量同步：只 upsert 新增/更新的会话，删除已不存在的
+    pub fn incremental_sync(&self, sessions: &[Session]) -> Result<(), Box<dyn std::error::Error>> {
+        use std::collections::HashSet;
+        use tantivy::schema::Value;
+        use tantivy::TantivyDocument;
+
+        let searcher = self.reader.searcher();
+        let session_id_field = self.schema.get_field("session_id").unwrap();
+        let updated_at_field = self.schema.get_field("updated_at").unwrap();
+
+        // 收集索引中所有 session_id -> updated_at
+        let mut indexed: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+        for segment_reader in searcher.segment_readers() {
+            let store = segment_reader.get_store_reader(1)?;
+            for doc_id in 0..segment_reader.num_docs() {
+                let doc: TantivyDocument = store.get(doc_id)?;
+                let sid = doc.get_first(session_id_field)
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let ts = doc.get_first(updated_at_field)
+                    .and_then(|v| v.as_datetime())
+                    .map(|d| d.into_timestamp_micros())
+                    .unwrap_or(0);
+                if !sid.is_empty() {
+                    indexed.insert(sid, ts);
+                }
+            }
+        }
+
+        // 计算需要 upsert 的和需要删除的
+        let new_ids: HashSet<&str> = sessions.iter().map(|s| s.session_id.as_str()).collect();
+        let mut to_upsert = Vec::new();
+        for session in sessions {
+            let new_ts = session.updated_at.timestamp_micros();
+            match indexed.get(&session.session_id) {
+                Some(&old_ts) if old_ts == new_ts => {} // 无变化，跳过
+                _ => to_upsert.push(session),
+            }
+        }
+
+        let to_delete: Vec<String> = indexed.keys()
+            .filter(|id| !new_ids.contains(id.as_str()))
+            .cloned()
+            .collect();
+
+        if to_upsert.is_empty() && to_delete.is_empty() {
+            return Ok(()); // 无变化
+        }
+
+        let mut writer: IndexWriter = self.index.writer(50_000_000)?;
+
+        // 删除已不存在的
+        for id in &to_delete {
+            let term = tantivy::Term::from_field_text(session_id_field, id);
+            writer.delete_term(term);
+        }
+
+        // upsert 变化的
+        for session in &to_upsert {
+            let term = tantivy::Term::from_field_text(session_id_field, &session.session_id);
+            writer.delete_term(term);
+            self.add_session_to_writer(&mut writer, session)?;
+        }
+
+        writer.commit()?;
+        self.reader.reload()?;
+        eprintln!("[retalk] 增量同步: {} upsert, {} delete", to_upsert.len(), to_delete.len());
+        Ok(())
+    }
+
     /// 获取底层 Index 引用（供 searcher 模块使用）
     pub fn index(&self) -> &Index {
         &self.index

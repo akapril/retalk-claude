@@ -36,8 +36,9 @@ pub fn run() {
     // 加载配置
     let app_config = config::load_config();
 
-    // 初始化索引（空的，后台填充）
+    // 初始化索引（尝试打开已有索引）
     let index = SessionIndex::new().expect("Tantivy 索引初始化失败");
+    let has_existing_data = index.doc_count() > 0;
     let index = Arc::new(Mutex::new(index));
     let updater_instance = Arc::new(updater::Updater::new());
 
@@ -45,7 +46,11 @@ pub fn run() {
     let favorites = commands::load_favorites();
     let tags = commands::load_tags();
 
-    let ready = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    // 如果有已有索引数据，立即标记就绪（UI 秒开）
+    let ready = Arc::new(std::sync::atomic::AtomicBool::new(has_existing_data));
+    if has_existing_data {
+        eprintln!("[retalk] 已有索引数据，UI 立即可用");
+    }
 
     let state = AppState {
         index: Arc::clone(&index),
@@ -57,7 +62,7 @@ pub fn run() {
         ready: Arc::clone(&ready),
     };
 
-    // 后台线程：扫描数据 + 建立索引 + 启动更新策略（不阻塞 UI）
+    // 后台线程：增量同步 + 启动更新策略
     let bg_index = Arc::clone(&index);
     let bg_updater = Arc::clone(&updater_instance);
     let bg_sessions = Arc::clone(&state.sessions);
@@ -66,12 +71,23 @@ pub fn run() {
     std::thread::spawn(move || {
         eprintln!("[retalk] 后台扫描开始...");
         let sessions = scanner::scan_all_sessions();
-        eprintln!("[retalk] 扫描完成，共 {} 条会话，开始建索引...", sessions.len());
-        let _ = bg_index.lock().rebuild(&sessions);
+        eprintln!("[retalk] 扫描完成，共 {} 条会话", sessions.len());
+
+        {
+            let idx = bg_index.lock();
+            if has_existing_data {
+                // 增量同步：只更新有变化的
+                let _ = idx.incremental_sync(&sessions);
+            } else {
+                // 首次：全量建索引
+                let _ = idx.rebuild(&sessions);
+            }
+        }
+
         *bg_sessions.lock() = sessions;
-        bg_updater.init_mtime_snapshot(); // 防止首次 on_demand_refresh 重复扫描
+        bg_updater.init_mtime_snapshot();
         bg_ready.store(true, std::sync::atomic::Ordering::Relaxed);
-        eprintln!("[retalk] 索引建立完成，数据就绪");
+        eprintln!("[retalk] 数据同步完成");
 
         // 启动后台更新策略
         bg_updater.start_watcher(Arc::clone(&bg_index), &bg_config);
