@@ -4,5 +4,8 @@
   "private": true,
   "scripts": {
     "tauri": "cargo tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.10.1"
   }
 }

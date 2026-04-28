@@ -22,6 +22,7 @@ toml = "0.8"
 chrono = { version = "0.4", features = ["serde"] }
 dirs = "6"
 parking_lot = "0.12"
+rusqlite = { version = "0.33", features = ["bundled"] }
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
