@@ -278,6 +278,14 @@ fn export_session_markdown_inner(
     Ok(md)
 }
 
+/// 获取用户桌面路径
+#[tauri::command]
+pub fn get_desktop_path() -> Result<String, String> {
+    dirs::desktop_dir()
+        .map(|p| p.to_string_lossy().to_string())
+        .ok_or_else(|| "无法获取桌面路径".to_string())
+}
+
 // ============================================================
 // Feature 4: 快捷操作 — 在 VS Code / 文件管理器中打开
 // ============================================================

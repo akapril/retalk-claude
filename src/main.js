@@ -604,30 +604,33 @@ contextMenu.querySelectorAll(".ctx-item").forEach((item) => {
       case "copy-path":
         if (navigator.clipboard) {
           await navigator.clipboard.writeText(s.project_path);
+          showToast("已复制项目路径");
         }
         break;
       case "copy-cmd":
         await copyCommand(s);
+        showToast("已复制恢复命令");
         break;
       case "export-md":
         try {
           const md = await invoke("export_session_markdown", { sessionId: s.session_id });
           if (navigator.clipboard) {
             await navigator.clipboard.writeText(md);
+            showToast("已复制 Markdown 到剪贴板");
           }
         } catch (e) {
-          console.error("导出 Markdown 失败:", e);
+          showToast("导出失败: " + e);
         }
         break;
       case "export-file":
         try {
-          // 保存到桌面
-          const desktop = await getDesktopPath();
+          const desktop = await invoke("get_desktop_path");
           const fileName = `${s.project_name}_${s.session_id.slice(0, 8)}.md`;
           const filePath = `${desktop}\\${fileName}`;
           await invoke("export_session_to_file", { sessionId: s.session_id, filePath });
+          showToast("已保存到 " + fileName);
         } catch (e) {
-          console.error("导出到文件失败:", e);
+          showToast("导出失败: " + e);
         }
         break;
     }
@@ -839,25 +842,18 @@ function estimateCost(provider, tokens) {
   return "$" + cost.toFixed(2);
 }
 
-/// 获取桌面路径（通过环境变量近似）
-async function getDesktopPath() {
-  // Windows: %USERPROFILE%\Desktop
-  // 由于 Tauri 无法直接获取环境变量，用固定路径
-  return "C:\\Users\\" + (await getUsername()) + "\\Desktop";
-}
-
-/// 获取当前用户名（简单近似）
-async function getUsername() {
-  try {
-    // 从某个已知的 project_path 推断用户名
-    // 兜底使用 "Administrator"
-    const s = sessions.find((s) => s.project_path.includes("\\Users\\"));
-    if (s) {
-      const match = s.project_path.match(/\\Users\\([^\\]+)/);
-      if (match) return match[1];
-    }
-  } catch (_) {}
-  return "Administrator";
+/// 操作反馈提示
+function showToast(message) {
+  let toast = document.getElementById("toast");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "toast";
+    toast.className = "toast";
+    document.getElementById("app").appendChild(toast);
+  }
+  toast.textContent = message;
+  toast.classList.add("show");
+  setTimeout(() => toast.classList.remove("show"), 2000);
 }
 
 // 窗口可见时刷新
