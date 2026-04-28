@@ -148,6 +148,13 @@ pub fn run() {
 
             app.global_shortcut().register(hotkey)?;
 
+            // === macOS: 隐藏 Dock 图标 + 设置窗口背景透明 ===
+            #[cfg(target_os = "macos")]
+            {
+                // 设置为 accessory 级别应用（不在 Dock 显示）
+                app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+            }
+
             // === 窗口失焦自动隐藏 ===
             if let Some(window) = app.get_webview_window("main") {
                 let w = window.clone();

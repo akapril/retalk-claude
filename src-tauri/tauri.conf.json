@@ -20,7 +20,8 @@
         "visible": false,
         "center": true,
         "alwaysOnTop": true,
-        "skipTaskbar": true
+        "skipTaskbar": true,
+        "backgroundThrottling": "disabled"
       }
     ]
   },
@@ -34,6 +35,13 @@
       "icons/icon.ico",
       "icons/icon.png"
     ],
+    "macOS": {
+      "frameworks": [],
+      "minimumSystemVersion": "10.15",
+      "exceptionDomain": "",
+      "signingIdentity": null,
+      "entitlements": null
+    },
     "linux": {
       "deb": {
         "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0"]

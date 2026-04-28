@@ -31,8 +31,10 @@ html, body {
   border: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: calc(100vh - 8px);
+  margin: 4px;
   backdrop-filter: blur(20px);
+  overflow: hidden;
 }
 
 .search-bar {
