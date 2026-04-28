@@ -7,3 +7,9 @@ node_modules/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Development docs (superpowers plugin artifacts)
+docs/superpowers/
+
+# Claude Code local config
+.claude/
