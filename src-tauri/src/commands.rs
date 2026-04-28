@@ -345,23 +345,67 @@ pub fn open_in_vscode(project_path: String) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+/// 在系统文件管理器中打开目录（跨平台）
 #[tauri::command]
 pub fn open_in_explorer(project_path: String) -> Result<(), String> {
-    Command::new("explorer")
-        .arg(&project_path)
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+    #[cfg(windows)]
+    {
+        Command::new("explorer")
+            .arg(&project_path)
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg(&project_path)
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+    #[cfg(target_os = "linux")]
+    {
+        Command::new("xdg-open")
+            .arg(&project_path)
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
 }
 
-/// 在文件管理器中打开并选中指定文件
+/// 在文件管理器中打开并选中指定文件（跨平台）
 #[tauri::command]
 pub fn open_in_explorer_select(file_path: String) -> Result<(), String> {
-    Command::new("explorer")
-        .args(["/select,", &file_path])
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+    #[cfg(windows)]
+    {
+        Command::new("explorer")
+            .args(["/select,", &file_path])
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+    #[cfg(target_os = "macos")]
+    {
+        // macOS: open -R 可以在 Finder 中选中文件
+        Command::new("open")
+            .args(["-R", &file_path])
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+    #[cfg(target_os = "linux")]
+    {
+        // Linux: xdg-open 不支持选中文件，打开其所在目录
+        let dir = std::path::Path::new(&file_path)
+            .parent()
+            .unwrap_or(std::path::Path::new("/"));
+        Command::new("xdg-open")
+            .arg(dir)
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
 }
 
 // ============================================================
@@ -618,16 +662,22 @@ pub fn toggle_mcp_server(tool: String, server_name: String, enabled: bool) -> Re
 }
 
 // ============================================================
-// Feature 8: 开机自启 — Windows 注册表操作
+// Feature 8: 开机自启（跨平台）
 // ============================================================
 
+/// 设置开机自启（跨平台）
 #[tauri::command]
 pub fn set_autostart(enabled: bool) -> Result<(), String> {
+    set_autostart_impl(enabled)
+}
+
+/// Windows: 通过注册表设置开机自启
+#[cfg(windows)]
+fn set_autostart_impl(enabled: bool) -> Result<(), String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let exe_path = exe.to_string_lossy().to_string();
 
     if enabled {
-        // 添加到 HKCU\Software\Microsoft\Windows\CurrentVersion\Run
         silent_command("reg")
             .args([
                 "add",
@@ -657,8 +707,72 @@ pub fn set_autostart(enabled: bool) -> Result<(), String> {
     Ok(())
 }
 
+/// macOS: 通过 LaunchAgents plist 设置开机自启
+#[cfg(target_os = "macos")]
+fn set_autostart_impl(enabled: bool) -> Result<(), String> {
+    let plist_dir = dirs::home_dir()
+        .ok_or("无法获取 home 目录")?
+        .join("Library")
+        .join("LaunchAgents");
+    let plist_path = plist_dir.join("com.retalk.app.plist");
+
+    if enabled {
+        let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+        let plist = format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.retalk.app</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{}</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+</dict>
+</plist>"#,
+            exe.to_string_lossy()
+        );
+        std::fs::create_dir_all(&plist_dir).map_err(|e| e.to_string())?;
+        std::fs::write(&plist_path, plist).map_err(|e| e.to_string())?;
+    } else {
+        let _ = std::fs::remove_file(&plist_path);
+    }
+    Ok(())
+}
+
+/// Linux: 通过 XDG autostart desktop 文件设置开机自启
+#[cfg(target_os = "linux")]
+fn set_autostart_impl(enabled: bool) -> Result<(), String> {
+    let autostart_dir = dirs::config_dir()
+        .ok_or("无法获取配置目录")?
+        .join("autostart");
+    let desktop_path = autostart_dir.join("retalk.desktop");
+
+    if enabled {
+        let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+        let desktop = format!(
+            "[Desktop Entry]\nType=Application\nName=retalk\nExec={}\nX-GNOME-Autostart-enabled=true\n",
+            exe.to_string_lossy()
+        );
+        std::fs::create_dir_all(&autostart_dir).map_err(|e| e.to_string())?;
+        std::fs::write(&desktop_path, desktop).map_err(|e| e.to_string())?;
+    } else {
+        let _ = std::fs::remove_file(&desktop_path);
+    }
+    Ok(())
+}
+
+/// 查询开机自启状态（跨平台）
 #[tauri::command]
 pub fn get_autostart() -> bool {
+    get_autostart_impl()
+}
+
+#[cfg(windows)]
+fn get_autostart_impl() -> bool {
     Command::new("reg")
         .args([
             "query",
@@ -668,5 +782,19 @@ pub fn get_autostart() -> bool {
         ])
         .output()
         .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+#[cfg(target_os = "macos")]
+fn get_autostart_impl() -> bool {
+    dirs::home_dir()
+        .map(|h| h.join("Library/LaunchAgents/com.retalk.app.plist").exists())
+        .unwrap_or(false)
+}
+
+#[cfg(target_os = "linux")]
+fn get_autostart_impl() -> bool {
+    dirs::config_dir()
+        .map(|c| c.join("autostart/retalk.desktop").exists())
         .unwrap_or(false)
 }

@@ -13,8 +13,9 @@ impl SessionProvider for AiderProvider {
     }
 
     fn is_available(&self) -> bool {
-        // Aider 文件散布在项目目录中，检查 aider 是否已安装
-        std::process::Command::new("where")
+        // 检查 aider 是否已安装（跨平台）
+        let which = if cfg!(windows) { "where" } else { "which" };
+        std::process::Command::new(which)
             .arg("aider")
             .output()
             .map(|o| o.status.success())
@@ -25,24 +26,36 @@ impl SessionProvider for AiderProvider {
         let mut sessions = Vec::new();
         let mut project_dirs: HashSet<PathBuf> = HashSet::new();
 
-        // 扫描常见工作区目录
-        for workspace_name in &["workspace", "projects", "code", "dev", "src", "repos"] {
-            for drive in &["C:", "D:", "E:"] {
-                let ws = PathBuf::from(format!("{}\\{}", drive, workspace_name));
-                if ws.exists() {
-                    if let Ok(entries) = fs::read_dir(&ws) {
-                        for entry in entries.flatten() {
-                            let path = entry.path();
-                            if path.is_dir() && path.join(".aider.chat.history.md").exists() {
-                                project_dirs.insert(path);
-                            }
-                        }
+        // 扫描常见工作区目录（跨平台）
+        let workspace_names = &["workspace", "projects", "code", "dev", "src", "repos"];
+
+        #[cfg(windows)]
+        {
+            // Windows: 扫描多个盘符
+            for workspace_name in workspace_names {
+                for drive in &["C:", "D:", "E:"] {
+                    let ws = PathBuf::from(format!("{}\\{}", drive, workspace_name));
+                    if ws.exists() {
+                        scan_aider_workspace(&ws, &mut project_dirs);
                     }
                 }
             }
         }
 
-        // 也检查 home 目录
+        #[cfg(not(windows))]
+        {
+            // macOS/Linux: 扫描 home 下的常见目录
+            if let Some(home) = dirs::home_dir() {
+                for workspace_name in workspace_names {
+                    let ws = home.join(workspace_name);
+                    if ws.exists() {
+                        scan_aider_workspace(&ws, &mut project_dirs);
+                    }
+                }
+            }
+        }
+
+        // 也检查 home 目录本身
         if let Some(home) = dirs::home_dir() {
             if home.join(".aider.chat.history.md").exists() {
                 project_dirs.insert(home);
@@ -58,6 +71,18 @@ impl SessionProvider for AiderProvider {
 
         sessions.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
         sessions
+    }
+}
+
+/// 扫描工作区目录下的 Aider 项目
+fn scan_aider_workspace(ws: &Path, project_dirs: &mut HashSet<PathBuf>) {
+    if let Ok(entries) = fs::read_dir(ws) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() && path.join(".aider.chat.history.md").exists() {
+                project_dirs.insert(path);
+            }
+        }
     }
 }
 

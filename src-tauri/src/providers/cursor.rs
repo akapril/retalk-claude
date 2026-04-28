@@ -126,14 +126,19 @@ impl SessionProvider for CursorProvider {
     }
 }
 
-/// 解码 file:// URI 为 Windows 路径
+/// 解码 file:// URI 为本地路径（跨平台）
 fn decode_file_uri(uri: &str) -> String {
     let path = uri
         .strip_prefix("file:///")
         .or_else(|| uri.strip_prefix("file://"))
         .unwrap_or(uri);
     let decoded = percent_decode(path);
-    decoded.replace("/", "\\")
+    // Windows 将 / 转为 \，Unix 保持 / 并补前缀
+    if cfg!(windows) {
+        decoded.replace("/", "\\")
+    } else {
+        format!("/{}", decoded)
+    }
 }
 
 /// URL 百分号解码

@@ -148,7 +148,7 @@ fn parse_continue_session(path: &Path) -> Option<Session> {
     })
 }
 
-/// 解码 file:// URI: "file:///d%3A/workspace/foo" -> "d:\workspace\foo"
+/// 解码 file:// URI 为本地路径（跨平台）
 fn decode_file_uri(uri: &str) -> String {
     let path = uri
         .strip_prefix("file:///")
@@ -156,8 +156,13 @@ fn decode_file_uri(uri: &str) -> String {
         .unwrap_or(uri);
     // URL 解码
     let decoded = percent_decode(path);
-    // 将 / 转为 \ (Windows)
-    decoded.replace("/", "\\")
+    // Windows 将 / 转为 \，Unix 保持 /
+    if cfg!(windows) {
+        decoded.replace("/", "\\")
+    } else {
+        // Unix: file:///home/user/... -> /home/user/...
+        format!("/{}", decoded)
+    }
 }
 
 fn percent_decode(input: &str) -> String {

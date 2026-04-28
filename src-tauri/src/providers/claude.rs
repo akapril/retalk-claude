@@ -260,20 +260,39 @@ fn extract_text_content(content: &serde_json::Value) -> String {
 }
 
 /// 将原始路径编码为 projects/ 下的目录名
-/// "D:\workspace\geo2" -> "D--workspace-geo2"
+/// Windows: "D:\workspace\geo2" -> "D--workspace-geo2"
+/// Unix:    "/home/user/workspace" -> "-home-user-workspace"
 fn encode_project_path(path: &str) -> String {
     path.replace(":\\", "--")
         .replace("\\", "-")
         .replace("/", "-")
 }
 
-/// 尝试从编码目录名反推原始路径（兜底方案）
+/// 尝试从编码目录名反推原始路径（兜底方案，跨平台）
 fn decode_project_dir(encoded: &str) -> String {
-    if let Some(pos) = encoded.find("--") {
-        let drive = &encoded[..pos];
-        let rest = &encoded[pos + 2..];
-        format!("{}:\\{}", drive, rest.replace("-", "\\"))
+    if cfg!(windows) {
+        // Windows: "D--workspace-geo2" -> "D:\workspace\geo2"
+        if let Some(pos) = encoded.find("--") {
+            let drive = &encoded[..pos];
+            let rest = &encoded[pos + 2..];
+            format!("{}:\\{}", drive, rest.replace("-", "\\"))
+        } else {
+            encoded.to_string()
+        }
     } else {
-        encoded.to_string()
+        // Unix: "-home-user-workspace" -> "/home/user/workspace"
+        // 编码时 "/" 被替换为 "-"，反推时将 "-" 替换回 "/"
+        if encoded.starts_with('-') {
+            encoded.replace("-", "/")
+        } else {
+            // 兜底：可能来自 Windows 的编码格式
+            if let Some(pos) = encoded.find("--") {
+                let drive = &encoded[..pos];
+                let rest = &encoded[pos + 2..];
+                format!("{}:\\{}", drive, rest.replace("-", "\\"))
+            } else {
+                encoded.to_string()
+            }
+        }
     }
 }
