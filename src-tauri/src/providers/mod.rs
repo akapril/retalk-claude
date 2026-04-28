@@ -1,7 +1,6 @@
 pub mod claude;
 pub mod codex;
 pub mod gemini;
-pub mod opencode;
 
 use crate::models::Session;
 
@@ -21,7 +20,6 @@ pub fn all_providers() -> Vec<Box<dyn SessionProvider>> {
         Box::new(claude::ClaudeProvider),
         Box::new(codex::CodexProvider),
         Box::new(gemini::GeminiProvider),
-        Box::new(opencode::OpenCodeProvider),
     ];
     providers.into_iter().filter(|p| p.is_available()).collect()
 }
