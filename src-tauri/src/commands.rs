@@ -601,6 +601,23 @@ pub fn auto_tag_sessions(state: State<AppState>) -> u32 {
 }
 
 // ============================================================
+// 生态面板 — 跨工具 Skills/MCP/配置 扫描与管理
+// ============================================================
+
+#[tauri::command]
+pub fn get_ecosystem() -> crate::ecosystem::EcosystemData {
+    crate::ecosystem::scan_ecosystem()
+}
+
+#[tauri::command]
+pub fn toggle_mcp_server(tool: String, server_name: String, enabled: bool) -> Result<(), String> {
+    match tool.as_str() {
+        "claude" => crate::ecosystem::toggle_claude_mcp(&server_name, enabled),
+        _ => Err("该工具暂不支持 MCP 服务器切换".to_string()),
+    }
+}
+
+// ============================================================
 // Feature 8: 开机自启 — Windows 注册表操作
 // ============================================================
 

@@ -16,6 +16,8 @@ let gitInfoCache = {};     // Feature 2: project_path -> { branch, dirty_count }
 let statsOpen = false;     // Feature 5: 统计面板状态
 let contextSession = null; // Feature 4: 右键菜单关联的会话
 let compareOpen = false;   // Feature 5(会话对比): 对比视图状态
+let ecoOpen = false;       // 生态面板状态
+let ecoTab = "skills";     // 生态面板当前标签: "skills" | "mcp" | "configs"
 let multiSelectMode = false; // Feature 6(批量操作): 多选模式
 let multiSelected = new Set(); // Feature 6: 已选会话 ID 集合
 let providerStatus = [];   // Feature 1(空状态引导): provider 可用状态
@@ -29,6 +31,7 @@ const previewMessages = document.getElementById("preview-messages");
 const contextMenu = document.getElementById("context-menu");
 const statsBtn = document.getElementById("stats-btn");
 const statsPanel = document.getElementById("stats-panel");
+const ecoBtn = document.getElementById("eco-btn");
 const ddProvider = document.getElementById("dd-provider");
 const ddView = document.getElementById("dd-view");
 const ddSort = document.getElementById("dd-sort");
@@ -144,12 +147,15 @@ settingsBtn.addEventListener("click", async () => {
 
 async function openSettings() {
   settingsOpen = true;
+  ecoOpen = false;
   sessionList.style.display = "none";
   previewPanel.style.display = "none";
   settingsPanel.style.display = "";
   statsPanel.style.display = "none";
   statsOpen = false;
   compareOpen = false;
+  const ecoPanel = document.getElementById("eco-panel");
+  if (ecoPanel) ecoPanel.style.display = "none";
   updateStatusBar();
 
   // 先显示面板，localStorage 值立即填入（不阻塞）
@@ -235,10 +241,13 @@ function openStats() {
   statsOpen = true;
   settingsOpen = false;
   compareOpen = false;
+  ecoOpen = false;
   sessionList.style.display = "none";
   previewPanel.style.display = "none";
   settingsPanel.style.display = "none";
   statsPanel.style.display = "";
+  const ecoPanel = document.getElementById("eco-panel");
+  if (ecoPanel) ecoPanel.style.display = "none";
   renderStats();
   updateStatusBar();
 }
@@ -249,6 +258,163 @@ function closeStats() {
   sessionList.style.display = "";
   searchInput.focus();
   updateStatusBar();
+}
+
+// === 生态面板 ===
+ecoBtn.addEventListener("click", () => {
+  if (ecoOpen) { closeEco(); } else { openEco(); }
+});
+
+async function openEco() {
+  ecoOpen = true;
+  settingsOpen = false;
+  statsOpen = false;
+  compareOpen = false;
+  sessionList.style.display = "none";
+  previewPanel.style.display = "none";
+  settingsPanel.style.display = "none";
+  statsPanel.style.display = "none";
+
+  // 动态创建或复用面板
+  let ecoPanel = document.getElementById("eco-panel");
+  if (!ecoPanel) {
+    ecoPanel = document.createElement("div");
+    ecoPanel.id = "eco-panel";
+    ecoPanel.className = "eco-panel";
+    document.getElementById("app").insertBefore(ecoPanel, statusBar);
+  }
+  ecoPanel.style.display = "";
+  ecoPanel.innerHTML = '<div class="empty-state">加载中...</div>';
+  updateStatusBar();
+
+  try {
+    const data = await invoke("get_ecosystem");
+    renderEcosystem(data);
+  } catch (e) {
+    ecoPanel.innerHTML = `<div class="empty-state">加载失败: ${escapeHtml(String(e))}</div>`;
+  }
+}
+
+function closeEco() {
+  ecoOpen = false;
+  const ecoPanel = document.getElementById("eco-panel");
+  if (ecoPanel) ecoPanel.style.display = "none";
+  sessionList.style.display = "";
+  searchInput.focus();
+  updateStatusBar();
+}
+
+function renderEcosystem(data) {
+  const ecoPanel = document.getElementById("eco-panel");
+
+  const tabsHtml = `
+    <div class="eco-tabs">
+      <button class="eco-tab ${ecoTab === 'skills' ? 'active' : ''}" data-tab="skills">Skills (${data.skills.length})</button>
+      <button class="eco-tab ${ecoTab === 'mcp' ? 'active' : ''}" data-tab="mcp">MCP 服务器 (${data.mcp_servers.length})</button>
+      <button class="eco-tab ${ecoTab === 'configs' ? 'active' : ''}" data-tab="configs">配置对比 (${data.configs.length})</button>
+    </div>
+  `;
+
+  let contentHtml = "";
+
+  if (ecoTab === "skills") {
+    if (data.skills.length === 0) {
+      contentHtml = '<div class="eco-empty">未检测到 Skills</div>';
+    } else {
+      const byTool = {};
+      data.skills.forEach(s => {
+        if (!byTool[s.tool]) byTool[s.tool] = [];
+        byTool[s.tool].push(s);
+      });
+      Object.entries(byTool).forEach(([tool, items]) => {
+        contentHtml += `<div class="eco-tool-group"><div class="eco-tool-name">${escapeHtml(tool)} (${items.length})</div>`;
+        items.forEach(s => {
+          contentHtml += `
+            <div class="eco-item">
+              <span class="eco-item-name">${escapeHtml(s.name)}</span>
+              <span class="eco-item-desc">${escapeHtml(s.description)}</span>
+              <span class="eco-item-meta">${escapeHtml(s.scope)}</span>
+            </div>`;
+        });
+        contentHtml += `</div>`;
+      });
+    }
+  } else if (ecoTab === "mcp") {
+    if (data.mcp_servers.length === 0) {
+      contentHtml = '<div class="eco-empty">未检测到 MCP 服务器</div>';
+    } else {
+      const byTool = {};
+      data.mcp_servers.forEach(s => {
+        if (!byTool[s.tool]) byTool[s.tool] = [];
+        byTool[s.tool].push(s);
+      });
+      Object.entries(byTool).forEach(([tool, items]) => {
+        contentHtml += `<div class="eco-tool-group"><div class="eco-tool-name">${escapeHtml(tool)} (${items.length})</div>`;
+        items.forEach(s => {
+          const cmdStr = [s.command, ...s.args].join(" ");
+          const toggleClass = s.enabled ? "on" : "off";
+          contentHtml += `
+            <div class="eco-item">
+              <span class="eco-item-name">${escapeHtml(s.name)}</span>
+              <span class="eco-item-desc" title="${escapeHtml(cmdStr)}">${escapeHtml(truncate(cmdStr, 40))}</span>
+              <button class="eco-toggle ${toggleClass}" data-tool="${escapeHtml(s.tool)}" data-server="${escapeHtml(s.name)}" data-enabled="${s.enabled}" title="${s.enabled ? '已启用' : '已禁用'}"></button>
+            </div>`;
+        });
+        contentHtml += `</div>`;
+      });
+    }
+  } else if (ecoTab === "configs") {
+    if (data.configs.length === 0) {
+      contentHtml = '<div class="eco-empty">未检测到配置</div>';
+    } else {
+      // 透视表：行 = 配置项，列 = 工具
+      const tools = [...new Set(data.configs.map(c => c.tool))];
+      const keys = [...new Set(data.configs.map(c => c.key))];
+      const lookup = {};
+      data.configs.forEach(c => { lookup[`${c.tool}:${c.key}`] = c.value; });
+
+      contentHtml = `<table class="eco-config-table"><thead><tr><th>配置项</th>`;
+      tools.forEach(t => { contentHtml += `<th>${escapeHtml(t)}</th>`; });
+      contentHtml += `</tr></thead><tbody>`;
+      keys.forEach(k => {
+        contentHtml += `<tr><td>${escapeHtml(k)}</td>`;
+        tools.forEach(t => {
+          const val = lookup[`${t}:${k}`] || "-";
+          contentHtml += `<td>${escapeHtml(val)}</td>`;
+        });
+        contentHtml += `</tr>`;
+      });
+      contentHtml += `</tbody></table>`;
+    }
+  }
+
+  ecoPanel.innerHTML = tabsHtml + contentHtml;
+
+  // 标签切换事件
+  ecoPanel.querySelectorAll(".eco-tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+      ecoTab = tab.dataset.tab;
+      renderEcosystem(data);
+    });
+  });
+
+  // MCP 服务器启禁切换事件
+  ecoPanel.querySelectorAll(".eco-toggle").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const tool = btn.dataset.tool;
+      const server = btn.dataset.server;
+      const currentEnabled = btn.dataset.enabled === "true";
+      try {
+        await invoke("toggle_mcp_server", { tool, serverName: server, enabled: !currentEnabled });
+        showToast(`${server} 已${currentEnabled ? '禁用' : '启用'}`);
+        // 刷新数据
+        const freshData = await invoke("get_ecosystem");
+        renderEcosystem(freshData);
+      } catch (e) {
+        showToast("操作失败: " + e);
+      }
+    });
+  });
 }
 
 function renderStats() {
@@ -755,7 +921,7 @@ function updatePreview() {
       previewMessages.innerHTML = msgs
         .map((m) => `<div class="preview-msg">${highlightMatch(truncate(m, 120), currentQuery)}</div>`)
         .join("");
-      if (!settingsOpen && !statsOpen) {
+      if (!settingsOpen && !statsOpen && !ecoOpen) {
         previewPanel.style.display = "";
       }
     } catch (_) {
@@ -1006,6 +1172,8 @@ document.addEventListener("keydown", async (e) => {
       hideContextMenu();
     } else if (multiSelectMode) {
       exitMultiSelect();
+    } else if (ecoOpen) {
+      closeEco();
     } else if (compareOpen) {
       closeCompareView();
     } else if (settingsOpen) {
@@ -1148,6 +1316,10 @@ function updateStatusBar() {
   if (!statusBar) return;
   if (multiSelectMode) {
     statusBar.innerHTML = `<span>已选 ${multiSelected.size} 项</span><span>Esc 取消</span>`;
+    return;
+  }
+  if (ecoOpen) {
+    statusBar.innerHTML = `<span>Esc 返回</span>`;
     return;
   }
   if (settingsOpen) {

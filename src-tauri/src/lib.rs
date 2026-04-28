@@ -1,5 +1,6 @@
 mod commands;
 mod config;
+mod ecosystem;
 mod indexer;
 mod models;
 mod providers;
@@ -188,6 +189,8 @@ pub fn run() {
             commands::rebuild_index,
             commands::set_note,
             commands::get_all_notes,
+            commands::get_ecosystem,
+            commands::toggle_mcp_server,
         ])
         .run(tauri::generate_context!())
         .expect("启动 retalk 失败");
