@@ -307,7 +307,7 @@ async function openNewSession() {
     </div>
     <div class="ns-section">
       <div class="ns-label">${t.selectProject}</div>
-      <input class="ns-path-input" id="ns-custom-path" placeholder="${t.customPath}" />
+      <input class="ns-path-input" id="ns-custom-path" placeholder="${t.customPath}" value="${escapeHtml(localStorage.getItem('retalk_defaultDir') || '')}" />
       <div class="ns-label" style="margin-top:8px;font-size:10px;opacity:0.6">${t.recentProjects}</div>
       <div class="ns-projects">${projectItems || `<div class="eco-empty">${t.noResults}</div>`}</div>
     </div>
@@ -407,6 +407,7 @@ async function openSettings() {
   // 先显示面板，localStorage 值立即填入（不阻塞）
   setCustomSelectValue("cfg-open-mode", localStorage.getItem("retalk_openMode") || "terminal");
   setCustomSelectValue("cfg-theme", localStorage.getItem("retalk_theme") || "dark");
+  document.getElementById("cfg-default-dir").value = localStorage.getItem("retalk_defaultDir") || "";
 
   // 并行加载后端数据
   const [configResult, autostartResult] = await Promise.allSettled([
@@ -466,6 +467,7 @@ document.getElementById("settings-save").addEventListener("click", async () => {
     await invoke("save_config", { newConfig });
     // 保存打开方式到 localStorage
     localStorage.setItem("retalk_openMode", getCustomSelectValue("cfg-open-mode"));
+    localStorage.setItem("retalk_defaultDir", document.getElementById("cfg-default-dir").value.trim());
     // 应用主题
     document.documentElement.dataset.theme = selectedTheme;
     localStorage.setItem("retalk_theme", selectedTheme);
