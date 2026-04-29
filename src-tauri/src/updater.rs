@@ -31,10 +31,17 @@ impl Updater {
 
     /// 初始化 mtime 快照，防止首次 on_demand_refresh 误判为"有变化"
     pub fn init_mtime_snapshot(&self) {
-        let history_path = claude_dir().join("history.jsonl");
-        let mtime = std::fs::metadata(&history_path)
-            .and_then(|m| m.modified())
-            .ok();
+        let home = dirs::home_dir().unwrap_or_default();
+        let check_paths = vec![
+            claude_dir().join("history.jsonl"),
+            home.join(".codex").join("history.jsonl"),
+            home.join(".gemini").join("projects.json"),
+            home.join(".local").join("share").join("opencode").join("opencode.db"),
+            home.join(".local").join("share").join("kilo").join("kilo.db"),
+        ];
+        let mtime = check_paths.iter()
+            .filter_map(|p| std::fs::metadata(p).and_then(|m| m.modified()).ok())
+            .max();
         *self.last_history_mtime.lock() = mtime;
     }
 
@@ -63,13 +70,34 @@ impl Updater {
                 }
             };
 
-            // 监听 ~/.claude/ 目录（非递归）
-            let _ = debouncer.watcher().watch(&claude, notify::RecursiveMode::NonRecursive);
+            let home = dirs::home_dir().unwrap_or_default();
 
-            // 监听 projects/ 目录（递归）
+            // 监听所有工具的数据目录
+            // Claude Code
+            let _ = debouncer.watcher().watch(&claude, notify::RecursiveMode::NonRecursive);
             let projects_path = claude.join("projects");
             if projects_path.exists() {
                 let _ = debouncer.watcher().watch(&projects_path, notify::RecursiveMode::Recursive);
+            }
+            // Codex CLI
+            let codex_sessions = home.join(".codex").join("sessions");
+            if codex_sessions.exists() {
+                let _ = debouncer.watcher().watch(&codex_sessions, notify::RecursiveMode::Recursive);
+            }
+            // Gemini CLI
+            let gemini_tmp = home.join(".gemini").join("tmp");
+            if gemini_tmp.exists() {
+                let _ = debouncer.watcher().watch(&gemini_tmp, notify::RecursiveMode::Recursive);
+            }
+            // OpenCode
+            let opencode_dir = home.join(".local").join("share").join("opencode");
+            if opencode_dir.exists() {
+                let _ = debouncer.watcher().watch(&opencode_dir, notify::RecursiveMode::NonRecursive);
+            }
+            // Kilo Code
+            let kilo_dir = home.join(".local").join("share").join("kilo");
+            if kilo_dir.exists() {
+                let _ = debouncer.watcher().watch(&kilo_dir, notify::RecursiveMode::NonRecursive);
             }
 
             loop {
@@ -79,24 +107,28 @@ impl Updater {
                         let start = Instant::now();
                         let mut files_count = 0u64;
 
+                        let mut needs_full_rescan = false;
                         for event in &events {
                             let path = &event.path;
-                            if path.extension().and_then(|e| e.to_str()) == Some("jsonl") {
-                                if path.file_name().and_then(|n| n.to_str())
-                                    == Some("history.jsonl")
-                                {
-                                    // history.jsonl 变更：全量重建索引
-                                    let sessions = scanner::scan_all_sessions();
-                                    let _ = index.lock().rebuild(&sessions);
-                                    files_count += 1;
-                                } else if let Some(session) =
-                                    scanner::scan_single_session(path)
-                                {
-                                    // 单个 session 文件变更：增量更新
+                            let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+                            let is_claude_path = path.to_string_lossy().contains(".claude");
+
+                            if ext == "jsonl" && is_claude_path {
+                                if path.file_name().and_then(|n| n.to_str()) == Some("history.jsonl") {
+                                    needs_full_rescan = true;
+                                } else if let Some(session) = scanner::scan_single_session(path) {
                                     let _ = index.lock().upsert_session(&session);
                                     files_count += 1;
                                 }
+                            } else if ext == "jsonl" || ext == "json" || ext == "db" {
+                                // Codex/Gemini/OpenCode/Kilo 数据变更 → 全量重扫
+                                needs_full_rescan = true;
                             }
+                        }
+                        if needs_full_rescan {
+                            let sessions = scanner::scan_all_sessions();
+                            let _ = index.lock().rebuild(&sessions);
+                            files_count += sessions.len() as u64;
                         }
 
                         let elapsed = start.elapsed().as_millis() as u64;
@@ -165,11 +197,19 @@ impl Updater {
         }
 
         let start = Instant::now();
-        let history_path = claude_dir().join("history.jsonl");
+        let home = dirs::home_dir().unwrap_or_default();
 
-        let current_mtime = std::fs::metadata(&history_path)
-            .and_then(|m| m.modified())
-            .ok();
+        // 检查所有工具的关键文件 mtime（取最新的）
+        let check_paths = vec![
+            claude_dir().join("history.jsonl"),
+            home.join(".codex").join("history.jsonl"),
+            home.join(".gemini").join("projects.json"),
+            home.join(".local").join("share").join("opencode").join("opencode.db"),
+            home.join(".local").join("share").join("kilo").join("kilo.db"),
+        ];
+        let current_mtime = check_paths.iter()
+            .filter_map(|p| std::fs::metadata(p).and_then(|m| m.modified()).ok())
+            .max();
 
         let should_update = {
             let mut last = self.last_history_mtime.lock();
