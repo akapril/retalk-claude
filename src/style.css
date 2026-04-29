@@ -16,6 +16,17 @@
   --radius: 12px;
 }
 
+:root[data-theme="light"] {
+  --bg: rgba(255, 255, 255, 0.95);
+  --bg-item: rgba(0, 0, 0, 0.03);
+  --bg-item-hover: rgba(0, 0, 0, 0.06);
+  --bg-item-selected: rgba(74, 144, 217, 0.15);
+  --text: #1a1a1a;
+  --text-dim: #666;
+  --text-highlight: #2563eb;
+  --border: rgba(0, 0, 0, 0.1);
+}
+
 html, body {
   background: transparent;
   font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
@@ -49,6 +60,10 @@ html, body {
   border-bottom: 1px solid var(--border);
   gap: 8px;
 }
+
+.search-wrapper { position: relative; flex: 1; display: flex; align-items: center; }
+.search-clear { position: absolute; right: 4px; background: none; border: none; color: var(--text-dim); font-size: 16px; cursor: pointer; padding: 0 4px; line-height: 1; }
+.search-clear:hover { color: var(--text); }
 
 #search-input {
   flex: 1;
@@ -1136,3 +1151,23 @@ html, body {
 .eco-add-actions { display: flex; gap: 6px; justify-content: flex-end; }
 select.eco-add-input { cursor: pointer; }
 .eco-mcp-remove { margin-left: 6px; padding: 1px 6px !important; font-size: 10px !important; flex-shrink: 0; }
+
+/* ======================== Light theme overrides ======================== */
+:root[data-theme="light"] .icon-dropdown-menu,
+:root[data-theme="light"] .custom-select-menu,
+:root[data-theme="light"] .context-menu {
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+}
+
+:root[data-theme="light"] .preview-panel {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+:root[data-theme="light"] .session-item {
+  border-bottom-color: rgba(0, 0, 0, 0.05);
+}
+
+:root[data-theme="light"] .toast {
+  background: rgba(37, 99, 235, 0.95);
+}

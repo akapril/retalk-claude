@@ -149,6 +149,30 @@ pub fn save_config(
 }
 
 // ============================================================
+// 快捷键热更新 — 注销旧快捷键并注册新快捷键
+// ============================================================
+
+#[tauri::command]
+pub fn update_hotkey(app: tauri::AppHandle, new_hotkey: String) -> Result<(), String> {
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
+
+    // 注销所有现有快捷键
+    let _ = app.global_shortcut().unregister_all();
+
+    // 解析新快捷键字符串（如 "Ctrl+Shift+C"）
+    let shortcut: Shortcut = new_hotkey.parse().map_err(|e| format!("无效快捷键: {:?}", e))?;
+
+    // 注册新快捷键并绑定 toggle_window 处理
+    app.global_shortcut().on_shortcut(shortcut, |app, _shortcut, event| {
+        if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+            crate::toggle_window(app);
+        }
+    }).map_err(|e| format!("注册失败: {}", e))?;
+
+    Ok(())
+}
+
+// ============================================================
 // Feature 1: 会话预览 — 返回指定会话的最后 3 条用户消息
 // ============================================================
 

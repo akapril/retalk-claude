@@ -9,13 +9,16 @@
 <body>
   <div id="app">
     <div class="search-bar">
-      <input
-        type="text"
-        id="search-input"
-        placeholder="搜索会话..."
-        autocomplete="off"
-        spellcheck="false"
-      />
+      <div class="search-wrapper">
+        <input
+          type="text"
+          id="search-input"
+          placeholder="搜索会话..."
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button id="search-clear" class="search-clear" style="display:none">&times;</button>
+      </div>
       <div class="toolbar-icons">
         <div class="icon-dropdown" id="dd-provider">
           <button class="icon-btn" title="工具筛选"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M1 8h14M8 2a10 10 0 0 1 3 6 10 10 0 0 1-3 6 10 10 0 0 1-3-6 10 10 0 0 1 3-6z"/></svg></button>
@@ -52,14 +55,14 @@
     </div>
     <!-- 右键菜单 -->
     <div id="context-menu" class="context-menu" style="display:none">
-      <div class="ctx-item" data-action="resume">恢复会话</div>
-      <div class="ctx-item" data-action="vscode">在 VS Code 中打开</div>
-      <div class="ctx-item" data-action="explorer">在文件管理器中打开</div>
-      <div class="ctx-item" data-action="copy-path">复制项目路径</div>
-      <div class="ctx-item" data-action="copy-cmd">复制恢复命令</div>
-      <div class="ctx-item" data-action="export-md">导出 Markdown</div>
-      <div class="ctx-item" data-action="export-file">导出到文件</div>
-      <div class="ctx-item" data-action="compare">对比工具</div>
+      <div class="ctx-item" data-action="resume" data-i18n="resume">恢复会话</div>
+      <div class="ctx-item" data-action="vscode" data-i18n="openVscode">在 VS Code 中打开</div>
+      <div class="ctx-item" data-action="explorer" data-i18n="openExplorer">在文件管理器中打开</div>
+      <div class="ctx-item" data-action="copy-path" data-i18n="copyPath">复制项目路径</div>
+      <div class="ctx-item" data-action="copy-cmd" data-i18n="copyCmd">复制恢复命令</div>
+      <div class="ctx-item" data-action="export-md" data-i18n="exportMd">导出 Markdown</div>
+      <div class="ctx-item" data-action="export-file" data-i18n="exportFile">导出到文件</div>
+      <div class="ctx-item" data-action="compare" data-i18n="compare">对比工具</div>
     </div>
     <!-- 统计视图 -->
     <div id="stats-panel" class="stats-panel" style="display:none"></div>
@@ -119,7 +122,17 @@
         </div>
       </div>
       <div class="settings-section">
-        <div class="settings-title">界面</div>
+        <div class="settings-title" data-i18n="settings-ui">界面</div>
+        <div class="settings-row">
+          <label data-i18n="theme">主题</label>
+          <div class="custom-select" id="cfg-theme" data-value="dark">
+            <div class="custom-select-display">深色</div>
+            <div class="custom-select-menu">
+              <div class="custom-select-item active" data-value="dark">深色</div>
+              <div class="custom-select-item" data-value="light">浅色</div>
+            </div>
+          </div>
+        </div>
         <div class="settings-row">
           <label>最大结果数</label>
           <input type="number" id="cfg-max-results" class="settings-input settings-input-sm" min="10" max="500" />

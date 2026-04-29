@@ -1,10 +1,80 @@
 const { invoke } = window.__TAURI__.core;
 const { getCurrentWindow } = window.__TAURI__.window;
 
+// === i18n 国际化 ===
+const LANG = navigator.language.startsWith("zh") ? "zh" : "en";
+const i18n = {
+  zh: {
+    searchPlaceholder: "搜索会话...",
+    noResults: "没有找到会话",
+    scanning: "正在扫描会话数据...",
+    noProviders: "未检测到 AI 编码工具",
+    today: "今天", yesterday: "昨天", thisWeek: "本周", thisMonth: "本月", earlier: "更早",
+    resume: "恢复会话", openVscode: "在 VS Code 中打开", openExplorer: "在文件管理器中打开",
+    copyPath: "复制项目路径", copyCmd: "复制恢复命令", exportMd: "导出 Markdown",
+    exportFile: "导出到文件", compare: "对比工具",
+    settings: "设置", stats: "统计", ecosystem: "生态",
+    hotkey: "全局快捷键", terminal: "首选终端", autoDetect: "自动检测",
+    openMode: "双击默认动作", resumeTerminal: "恢复到终端", openInVscode: "在 VS Code 中打开",
+    save: "保存", cancel: "取消", rebuild: "重建", execute: "执行",
+    installed: "已安装", available: "可安装",
+    favorites: "收藏", tags: "标签", notes: "备注",
+    byProject: "按项目", timeline: "时间线", byTime: "按时间", byName: "按名称",
+    view: "视图", sort: "排序",
+    allTools: "全部工具",
+    copiedToClipboard: "已复制到剪贴板", savedToDesktop: "已保存到桌面",
+    autostart: "开机自启动", autoTag: "自动识别标签", rebuildIndex: "重建搜索索引",
+    pressKey: "请按下快捷键...",
+    navHint: "↑↓ 导航", selectHint: "单击选中", openHint: "双击打开", copyHint: "Ctrl+C 复制", escHint: "Esc 关闭",
+    back: "Esc 返回",
+    theme: "主题", themeDark: "深色", themeLight: "浅色",
+    scanned: "已扫描完成，暂无会话记录", noMatchResults: "没有找到匹配的会话",
+    copiedPath: "已复制项目路径", copiedCmd: "已复制恢复命令", copiedMd: "已复制 Markdown 到剪贴板",
+  },
+  en: {
+    searchPlaceholder: "Search sessions...",
+    noResults: "No sessions found",
+    scanning: "Scanning session data...",
+    noProviders: "No AI coding tools detected",
+    today: "Today", yesterday: "Yesterday", thisWeek: "This Week", thisMonth: "This Month", earlier: "Earlier",
+    resume: "Resume Session", openVscode: "Open in VS Code", openExplorer: "Open in File Manager",
+    copyPath: "Copy Project Path", copyCmd: "Copy Resume Command", exportMd: "Export Markdown",
+    exportFile: "Export to File", compare: "Compare Tools",
+    settings: "Settings", stats: "Statistics", ecosystem: "Ecosystem",
+    hotkey: "Global Hotkey", terminal: "Preferred Terminal", autoDetect: "Auto Detect",
+    openMode: "Default Open Action", resumeTerminal: "Resume in Terminal", openInVscode: "Open in VS Code",
+    save: "Save", cancel: "Cancel", rebuild: "Rebuild", execute: "Execute",
+    installed: "Installed", available: "Available",
+    favorites: "Favorites", tags: "Tags", notes: "Notes",
+    byProject: "By Project", timeline: "Timeline", byTime: "By Time", byName: "By Name",
+    view: "View", sort: "Sort",
+    allTools: "All Tools",
+    copiedToClipboard: "Copied to clipboard", savedToDesktop: "Saved to desktop",
+    autostart: "Start on Boot", autoTag: "Auto Tag", rebuildIndex: "Rebuild Search Index",
+    pressKey: "Press shortcut key...",
+    navHint: "↑↓ Navigate", selectHint: "Click Select", openHint: "Double-click Open", copyHint: "Ctrl+C Copy", escHint: "Esc Close",
+    back: "Esc Back",
+    theme: "Theme", themeDark: "Dark", themeLight: "Light",
+    scanned: "Scan complete, no sessions found", noMatchResults: "No matching sessions found",
+    copiedPath: "Project path copied", copiedCmd: "Resume command copied", copiedMd: "Markdown copied to clipboard",
+  }
+};
+const t = i18n[LANG];
+
+// === 主题初始化 ===
+const savedTheme = localStorage.getItem("retalk_theme") || "dark";
+document.documentElement.dataset.theme = savedTheme;
+
 // 检测平台，macOS 需要特殊透明处理
 if (navigator.userAgent.includes("Macintosh") || navigator.platform.includes("Mac")) {
   document.documentElement.classList.add("macos");
 }
+
+// === i18n: 应用翻译到带 data-i18n 属性的静态元素 ===
+document.querySelectorAll("[data-i18n]").forEach(el => {
+  const key = el.dataset.i18n;
+  if (t[key]) el.textContent = t[key];
+});
 
 let sessions = [];
 let selectedIndex = 0;
@@ -30,6 +100,8 @@ let multiSelected = new Set(); // Feature 6: 已选会话 ID 集合
 let providerStatus = [];   // Feature 1(空状态引导): provider 可用状态
 
 const searchInput = document.getElementById("search-input");
+const searchClear = document.getElementById("search-clear");
+searchInput.placeholder = t.searchPlaceholder;
 const sessionList = document.getElementById("session-list");
 const settingsBtn = document.getElementById("settings-btn");
 const settingsPanel = document.getElementById("settings-panel");
@@ -171,7 +243,7 @@ async function waitForReady() {
       ready = await invoke("is_ready");
     } catch (_) {}
     if (!ready) {
-      sessionList.innerHTML = '<div class="empty-state">正在扫描会话数据...</div>';
+      sessionList.innerHTML = `<div class="empty-state">${t.scanning}</div>`;
       await new Promise((r) => setTimeout(r, 500));
     }
   }
@@ -201,6 +273,7 @@ async function openSettings() {
 
   // 先显示面板，localStorage 值立即填入（不阻塞）
   setCustomSelectValue("cfg-open-mode", localStorage.getItem("retalk_openMode") || "terminal");
+  setCustomSelectValue("cfg-theme", localStorage.getItem("retalk_theme") || "dark");
 
   // 并行加载后端数据
   const [configResult, autostartResult] = await Promise.allSettled([
@@ -236,6 +309,7 @@ function closeSettings() {
 document.getElementById("settings-cancel").addEventListener("click", closeSettings);
 
 document.getElementById("settings-save").addEventListener("click", async () => {
+  const selectedTheme = getCustomSelectValue("cfg-theme") || "dark";
   const newConfig = {
     general: {
       hotkey: document.getElementById("cfg-hotkey").value,
@@ -250,7 +324,7 @@ document.getElementById("settings-save").addEventListener("click", async () => {
       on_demand_enabled: document.getElementById("cfg-ondemand").checked,
     },
     ui: {
-      theme: "dark",
+      theme: selectedTheme,
       max_results: parseInt(document.getElementById("cfg-max-results").value) || 50,
     },
   };
@@ -259,6 +333,15 @@ document.getElementById("settings-save").addEventListener("click", async () => {
     await invoke("save_config", { newConfig });
     // 保存打开方式到 localStorage
     localStorage.setItem("retalk_openMode", getCustomSelectValue("cfg-open-mode"));
+    // 应用主题
+    document.documentElement.dataset.theme = selectedTheme;
+    localStorage.setItem("retalk_theme", selectedTheme);
+    // 快捷键热更新：注销旧快捷键并注册新快捷键
+    try {
+      await invoke("update_hotkey", { newHotkey: newConfig.general.hotkey });
+    } catch (e) {
+      showToast("快捷键注册失败: " + e);
+    }
     // Feature 8: 保存开机自启状态
     const autostart = document.getElementById("cfg-autostart").checked;
     await invoke("set_autostart", { enabled: autostart });
@@ -955,15 +1038,15 @@ function render() {
     // Feature 1: 空状态引导 — 区分不同原因
     const hasProviders = providerStatus.some((p) => p.available);
     if (currentQuery.trim()) {
-      sessionList.innerHTML = '<div class="empty-state">没有找到匹配的会话</div>';
+      sessionList.innerHTML = `<div class="empty-state">${t.noMatchResults}</div>`;
     } else if (!hasProviders && providerStatus.length > 0) {
       const names = providerStatus.map((p) => p.name).join(", ");
       sessionList.innerHTML = `<div class="empty-state-detail">
-        <div>未检测到 AI 编码工具</div>
+        <div>${t.noProviders}</div>
         <div class="providers-list">支持: ${escapeHtml(names)}</div>
       </div>`;
     } else {
-      sessionList.innerHTML = '<div class="empty-state">已扫描完成，暂无会话记录</div>';
+      sessionList.innerHTML = `<div class="empty-state">${t.scanned}</div>`;
     }
     previewPanel.style.display = "none";
     updateStatusBar();
@@ -1003,21 +1086,21 @@ function renderTimeline(list) {
 
 /// Feature 3: 根据日期字符串返回时间分组标签
 function getTimeGroup(dateStr) {
-  if (!dateStr || dateStr.length < 11) return "更早";
+  if (!dateStr || dateStr.length < 11) return t.earlier;
   const now = new Date();
   const month = parseInt(dateStr.substring(0, 2), 10);
   const day = parseInt(dateStr.substring(3, 5), 10);
-  if (isNaN(month) || isNaN(day)) return "更早";
+  if (isNaN(month) || isNaN(day)) return t.earlier;
 
   const sessionDate = new Date(now.getFullYear(), month - 1, day);
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const diffDays = Math.floor((today - sessionDate) / (1000 * 60 * 60 * 24));
 
-  if (diffDays === 0) return "今天";
-  if (diffDays === 1) return "昨天";
-  if (diffDays < 7) return "本周";
-  if (diffDays < 30) return "本月";
-  return "更早";
+  if (diffDays === 0) return t.today;
+  if (diffDays === 1) return t.yesterday;
+  if (diffDays < 7) return t.thisWeek;
+  if (diffDays < 30) return t.thisMonth;
+  return t.earlier;
 }
 
 function renderGrouped(list) {
@@ -1369,19 +1452,19 @@ contextMenu.querySelectorAll(".ctx-item").forEach((item) => {
       case "copy-path":
         if (navigator.clipboard) {
           await navigator.clipboard.writeText(s.project_path);
-          showToast("已复制项目路径");
+          showToast(t.copiedPath);
         }
         break;
       case "copy-cmd":
         await copyCommand(s);
-        showToast("已复制恢复命令");
+        showToast(t.copiedCmd);
         break;
       case "export-md":
         try {
           const md = await invoke("export_session_markdown", { sessionId: s.session_id });
           if (navigator.clipboard) {
             await navigator.clipboard.writeText(md);
-            showToast("已复制 Markdown 到剪贴板");
+            showToast(t.copiedMd);
           }
         } catch (e) {
           showToast("导出失败: " + e);
@@ -1472,8 +1555,17 @@ function startTagEdit(sessionId, itemEl) {
 let searchTimer = null;
 searchInput.addEventListener("input", () => {
   currentQuery = searchInput.value;
+  searchClear.style.display = searchInput.value ? "" : "none";
   clearTimeout(searchTimer);
   searchTimer = setTimeout(loadSessions, 150);
+});
+
+searchClear.addEventListener("click", () => {
+  searchInput.value = "";
+  currentQuery = "";
+  searchClear.style.display = "none";
+  loadSessions();
+  searchInput.focus();
 });
 
 // 下拉选择已通过 setupDropdown 处理
@@ -1663,26 +1755,26 @@ function updateStatusBar() {
     return;
   }
   if (ecoOpen) {
-    statusBar.innerHTML = `<span>Esc 返回</span>`;
+    statusBar.innerHTML = `<span>${t.back}</span>`;
     return;
   }
   if (settingsOpen) {
-    statusBar.innerHTML = `<span>Esc 返回</span>`;
+    statusBar.innerHTML = `<span>${t.back}</span>`;
     return;
   }
   if (statsOpen) {
-    statusBar.innerHTML = `<span>Esc 返回</span>`;
+    statusBar.innerHTML = `<span>${t.back}</span>`;
     return;
   }
   if (compareOpen) {
-    statusBar.innerHTML = `<span>Esc 返回</span>`;
+    statusBar.innerHTML = `<span>${t.back}</span>`;
     return;
   }
   if (currentQuery.trim()) {
     statusBar.innerHTML = `<span>Enter 打开</span><span>Esc 清空搜索</span>`;
     return;
   }
-  statusBar.innerHTML = `<span>↑↓ 导航</span><span>单击选中</span><span>双击打开</span><span>Ctrl+C 复制</span><span>Esc 关闭</span>`;
+  statusBar.innerHTML = `<span>${t.navHint}</span><span>${t.selectHint}</span><span>${t.openHint}</span><span>${t.copyHint}</span><span>${t.escHint}</span>`;
 }
 
 // ======================== Feature 5: 会话对比视图 ========================
@@ -1860,13 +1952,13 @@ const hotkeyInput = document.getElementById("cfg-hotkey");
 
 hotkeyInput.addEventListener("focus", () => {
   hotkeyInput.classList.add("recording");
-  hotkeyInput.value = "请按下快捷键...";
+  hotkeyInput.value = t.pressKey;
 });
 
 hotkeyInput.addEventListener("blur", () => {
   hotkeyInput.classList.remove("recording");
   // 如果没有录到有效快捷键，恢复旧值
-  if (hotkeyInput.value === "请按下快捷键...") {
+  if (hotkeyInput.value === t.pressKey) {
     hotkeyInput.value = hotkeyInput.dataset.lastValue || "Ctrl+Shift+C";
   }
 });
@@ -1965,4 +2057,30 @@ function getCustomSelectValue(id) {
 }
 
 initCustomSelects();
+
+// === 窗口尺寸持久化 ===
+(async function restoreWindowSize() {
+  const saved = localStorage.getItem("retalk_windowSize");
+  if (saved) {
+    try {
+      const { width, height } = JSON.parse(saved);
+      const { LogicalSize } = window.__TAURI__.dpi;
+      if (width >= 400 && height >= 300) {
+        await appWindow.setSize(new LogicalSize(width, height));
+      }
+    } catch (_) {}
+  }
+  // 监听窗口大小变化并保存
+  let resizeTimer = null;
+  appWindow.onResized(({ payload }) => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      localStorage.setItem("retalk_windowSize", JSON.stringify({
+        width: payload.width,
+        height: payload.height,
+      }));
+    }, 500);
+  });
+})();
+
 init();

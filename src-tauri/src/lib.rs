@@ -20,8 +20,8 @@ use tauri::{
 };
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
-/// 切换窗口显隐
-fn toggle_window(app: &tauri::AppHandle) {
+/// 切换窗口显隐（pub 供 commands::update_hotkey 调用）
+pub fn toggle_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         if window.is_visible().unwrap_or(false) {
             let _ = window.hide();
@@ -227,6 +227,7 @@ pub fn run() {
             commands::gemini_ext_install,
             commands::gemini_ext_toggle,
             commands::gemini_ext_uninstall,
+            commands::update_hotkey,
         ])
         .run(tauri::generate_context!())
         .expect("启动 retalk 失败");
