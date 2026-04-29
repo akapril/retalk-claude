@@ -785,6 +785,21 @@ pub fn check_tool_update(tool: String) -> Result<serde_json::Value, String> {
     }
 }
 
+/// 安装 CLI 工具（npm install -g）
+#[tauri::command]
+pub fn install_cli_tool(pkg: String) -> Result<String, String> {
+    let output = silent_command("npm")
+        .args(["install", "-g", &pkg])
+        .output()
+        .map_err(|e| format!("npm 执行失败: {}", e))?;
+    if output.status.success() {
+        Ok(format!("{} 安装成功", pkg))
+    } else {
+        let err = String::from_utf8_lossy(&output.stderr).to_string();
+        Err(format!("安装失败: {}", err))
+    }
+}
+
 #[tauri::command]
 pub fn toggle_mcp_server(server_name: String, source: String, enabled: bool) -> Result<(), String> {
     crate::ecosystem::toggle_mcp_in_file(&source, &server_name, enabled)

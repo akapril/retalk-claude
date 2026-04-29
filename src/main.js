@@ -789,35 +789,44 @@ function renderEcosystem(data) {
       });
     }
   } else if (ecoTab === "overview") {
-    // 工具名到 check key 的映射
     const toolKeyMap = { "Claude Code": "claude", "Codex CLI": "codex", "Gemini CLI": "gemini", "OpenCode": "opencode", "Kilo Code": "kilo" };
-
-    contentHtml += `<button class="eco-add-trigger" id="check-updates-btn">检查更新</button>`;
+    const npmPkgMap = { claude: "@anthropic-ai/claude-code", codex: "@openai/codex", gemini: "@google/gemini-cli", opencode: "opencode-ai" };
 
     if (!data.overview || data.overview.length === 0) {
       contentHtml += '<div class="eco-empty">未检测到工具</div>';
     } else {
       data.overview.forEach(t => {
         const key = toolKeyMap[t.name] || "";
+        const pkg = npmPkgMap[key] || "";
         const statusDot = t.installed
           ? '<span class="eco-ov-dot eco-ov-dot-on"></span>'
           : '<span class="eco-ov-dot eco-ov-dot-off"></span>';
+
+        let actionsHtml = "";
+        if (t.installed && pkg) {
+          actionsHtml = `<button class="eco-plugin-btn ov-check-btn" data-tool="${key}">检查更新</button>
+            <span class="eco-ov-update" id="update-${key}" style="display:none"></span>`;
+        } else if (!t.installed && pkg) {
+          actionsHtml = `<button class="eco-plugin-btn eco-plugin-btn-install ov-install-btn" data-pkg="${pkg}" data-name="${escapeHtml(t.name)}">安装</button>`;
+        }
+
         contentHtml += `
           <div class="eco-ov-card ${t.installed ? '' : 'eco-ov-card-off'}" data-tool-key="${key}">
             <div class="eco-ov-header">
               ${statusDot}
               <span class="eco-ov-name">${escapeHtml(t.name)}</span>
               <span class="eco-ov-version">${t.installed ? escapeHtml(t.version) : '未安装'}</span>
-              <span class="eco-ov-update" id="update-${key}" style="display:none"></span>
             </div>
             ${t.installed ? `
             <div class="eco-ov-stats">
               <span>${t.session_count} 会话</span>
               <span>${t.mcp_count} MCP</span>
               <span>${t.skill_count} Skills</span>
+            </div>` : ''}
+            <div class="eco-ov-footer">
+              ${t.installed ? `<span class="eco-ov-path">${escapeHtml(t.data_dir)}</span>` : ''}
+              ${actionsHtml}
             </div>
-            <div class="eco-ov-path">${escapeHtml(t.data_dir)}</div>
-            ` : ''}
           </div>`;
       });
     }
@@ -833,38 +842,57 @@ function renderEcosystem(data) {
     });
   });
 
-  // 检查更新按钮
-  const checkUpdatesBtn = ecoPanel.querySelector("#check-updates-btn");
-  if (checkUpdatesBtn) {
-    checkUpdatesBtn.addEventListener("click", async () => {
-      checkUpdatesBtn.textContent = "检查中...";
-      checkUpdatesBtn.disabled = true;
-      const tools = ["claude", "codex", "gemini", "opencode"];
-      const results = await Promise.allSettled(
-        tools.map(t => invoke("check_tool_update", { tool: t }))
-      );
-      results.forEach((r, i) => {
-        const el = ecoPanel.querySelector(`#update-${tools[i]}`);
-        if (!el) return;
-        if (r.status === "fulfilled" && r.value) {
-          const latest = r.value.latest;
-          const card = el.closest(".eco-ov-card");
+  // 单个工具检查更新按钮
+  ecoPanel.querySelectorAll(".ov-check-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const tool = btn.dataset.tool;
+      btn.textContent = "检查中...";
+      btn.disabled = true;
+      try {
+        const result = await invoke("check_tool_update", { tool });
+        const el = ecoPanel.querySelector(`#update-${tool}`);
+        if (el && result) {
+          const latest = result.latest;
+          const card = btn.closest(".eco-ov-card");
           const currentVer = card?.querySelector(".eco-ov-version")?.textContent?.trim() || "";
           if (latest && currentVer && latest !== currentVer) {
             el.textContent = `→ ${latest}`;
             el.className = "eco-ov-update eco-ov-update-new";
-            el.title = `npm i -g ${r.value.package}`;
+            el.title = `npm i -g ${result.package}`;
           } else {
             el.textContent = "✓ 最新";
             el.className = "eco-ov-update eco-ov-update-ok";
           }
           el.style.display = "";
         }
-      });
-      checkUpdatesBtn.textContent = "检查更新";
-      checkUpdatesBtn.disabled = false;
+      } catch (e) {
+        showToast("检查失败: " + e);
+      }
+      btn.textContent = "检查更新";
+      btn.disabled = false;
     });
-  }
+  });
+
+  // 安装工具按钮
+  ecoPanel.querySelectorAll(".ov-install-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const pkg = btn.dataset.pkg;
+      const name = btn.dataset.name;
+      btn.textContent = "安装中...";
+      btn.disabled = true;
+      try {
+        const output = await invoke("install_cli_tool", { pkg });
+        showToast(`${name} 安装完成`);
+        // 刷新概览
+        const freshData = await invoke("get_ecosystem");
+        renderEcosystem(freshData);
+      } catch (e) {
+        showToast("安装失败: " + e);
+        btn.textContent = "安装";
+        btn.disabled = false;
+      }
+    });
+  });
 
   // 插件子导航：工具切换
   ecoPanel.querySelectorAll(".eco-sub-tab[data-ptool]").forEach(tab => {

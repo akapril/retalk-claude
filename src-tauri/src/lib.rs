@@ -223,6 +223,7 @@ pub fn run() {
             commands::get_all_notes,
             commands::get_ecosystem,
             commands::check_tool_update,
+            commands::install_cli_tool,
             commands::toggle_mcp_server,
             commands::plugin_toggle,
             commands::plugin_install,
