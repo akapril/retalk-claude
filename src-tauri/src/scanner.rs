@@ -17,8 +17,17 @@ pub fn scan_all_sessions() -> Vec<Session> {
     all_sessions
 }
 
-/// 扫描单个 Claude Code session 文件（用于 watcher 增量更新）
+/// 根据文件路径判断所属工具，增量扫描单个会话文件
 pub fn scan_single_session(path: &Path) -> Option<Session> {
-    // 目前仅 Claude Code 的 watcher 使用此函数
-    crate::providers::claude::scan_single_claude_session(path)
+    let path_str = path.to_string_lossy();
+
+    if path_str.contains(".claude") {
+        crate::providers::claude::scan_single_claude_session(path)
+    } else if path_str.contains(".codex") {
+        crate::providers::codex::scan_single_codex_session(path)
+    } else if path_str.contains(".gemini") {
+        crate::providers::gemini::scan_single_gemini_session(path)
+    } else {
+        None
+    }
 }

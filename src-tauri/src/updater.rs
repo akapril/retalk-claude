@@ -111,17 +111,32 @@ impl Updater {
                         for event in &events {
                             let path = &event.path;
                             let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-                            let is_claude_path = path.to_string_lossy().contains(".claude");
+                            let path_str = path.to_string_lossy();
+                            let is_claude_path = path_str.contains(".claude");
+                            let is_codex_path = path_str.contains(".codex");
+                            let is_gemini_path = path_str.contains(".gemini");
 
-                            if ext == "jsonl" && is_claude_path {
+                            if is_claude_path && ext == "jsonl" {
                                 if path.file_name().and_then(|n| n.to_str()) == Some("history.jsonl") {
                                     needs_full_rescan = true;
                                 } else if let Some(session) = scanner::scan_single_session(path) {
                                     let _ = index.lock().upsert_session(&session);
                                     files_count += 1;
                                 }
-                            } else if ext == "jsonl" || ext == "json" || ext == "db" {
-                                // Codex/Gemini/OpenCode/Kilo 数据变更 → 全量重扫
+                            } else if is_codex_path && ext == "jsonl" {
+                                // Codex: 增量扫描单个 session 文件
+                                if let Some(session) = scanner::scan_single_session(path) {
+                                    let _ = index.lock().upsert_session(&session);
+                                    files_count += 1;
+                                }
+                            } else if is_gemini_path && ext == "json" {
+                                // Gemini: 增量扫描单个 session 文件
+                                if let Some(session) = scanner::scan_single_session(path) {
+                                    let _ = index.lock().upsert_session(&session);
+                                    files_count += 1;
+                                }
+                            } else if ext == "db" {
+                                // SQLite (OpenCode/Kilo): 全量重扫
                                 needs_full_rescan = true;
                             }
                         }

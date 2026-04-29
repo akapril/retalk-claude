@@ -53,14 +53,15 @@ fn visit_dir(dir: &Path, sessions: &mut Vec<Session>) {
         if path.is_dir() {
             visit_dir(&path, sessions);
         } else if path.extension().and_then(|e| e.to_str()) == Some("jsonl") {
-            if let Some(session) = parse_codex_session(&path) {
+            if let Some(session) = scan_single_codex_session(&path) {
                 sessions.push(session);
             }
         }
     }
 }
 
-fn parse_codex_session(path: &Path) -> Option<Session> {
+/// 扫描单个 Codex session JSONL 文件（供 watcher 增量更新使用）
+pub fn scan_single_codex_session(path: &Path) -> Option<Session> {
     let file = File::open(path).ok()?;
     let reader = BufReader::new(file);
 

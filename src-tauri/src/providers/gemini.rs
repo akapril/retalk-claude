@@ -165,6 +165,19 @@ fn resolve_project(dir_name: &str, name_to_path: &HashMap<String, String>) -> (S
     }
 }
 
+/// 扫描单个 Gemini session JSON 文件（供 watcher 增量更新使用）
+pub fn scan_single_gemini_session(path: &Path) -> Option<Session> {
+    // 路径格式: ~/.gemini/tmp/<dir_name>/chats/<session>.json
+    let chats_dir = path.parent()?;
+    let project_dir = chats_dir.parent()?;
+    let dir_name = project_dir.file_name()?.to_string_lossy().to_string();
+
+    let name_to_path = load_project_map(&gemini_dir());
+    let (project_path, project_name) = resolve_project(&dir_name, &name_to_path);
+
+    parse_gemini_session(path, &project_path, &project_name)
+}
+
 fn parse_gemini_session(
     path: &Path,
     project_path: &str,
