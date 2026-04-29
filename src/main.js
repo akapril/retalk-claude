@@ -394,14 +394,17 @@ settingsBtn.addEventListener("click", async () => {
 async function openSettings() {
   settingsOpen = true;
   ecoOpen = false;
+  statsOpen = false;
+  compareOpen = false;
+  newSessionOpen = false;
   sessionList.style.display = "none";
   previewPanel.style.display = "none";
   settingsPanel.style.display = "";
   statsPanel.style.display = "none";
-  statsOpen = false;
-  compareOpen = false;
   const ecoPanel = document.getElementById("eco-panel");
   if (ecoPanel) ecoPanel.style.display = "none";
+  const nsPanel = document.getElementById("new-session-panel");
+  if (nsPanel) nsPanel.style.display = "none";
   updateStatusBar();
 
   // 先显示面板，localStorage 值立即填入（不阻塞）
@@ -501,12 +504,15 @@ function openStats() {
   settingsOpen = false;
   compareOpen = false;
   ecoOpen = false;
+  newSessionOpen = false;
   sessionList.style.display = "none";
   previewPanel.style.display = "none";
   settingsPanel.style.display = "none";
   statsPanel.style.display = "";
   const ecoPanel = document.getElementById("eco-panel");
   if (ecoPanel) ecoPanel.style.display = "none";
+  const nsPanel = document.getElementById("new-session-panel");
+  if (nsPanel) nsPanel.style.display = "none";
   renderStats();
   updateStatusBar();
 }
@@ -529,10 +535,13 @@ async function openEco() {
   settingsOpen = false;
   statsOpen = false;
   compareOpen = false;
+  newSessionOpen = false;
   sessionList.style.display = "none";
   previewPanel.style.display = "none";
   settingsPanel.style.display = "none";
   statsPanel.style.display = "none";
+  const nsPanel = document.getElementById("new-session-panel");
+  if (nsPanel) nsPanel.style.display = "none";
 
   // 动态创建或复用面板
   let ecoPanel = document.getElementById("eco-panel");
