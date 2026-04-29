@@ -761,6 +761,11 @@ pub fn get_ecosystem() -> crate::ecosystem::EcosystemData {
     crate::ecosystem::scan_ecosystem()
 }
 
+/// 获取 npm 命令名（Windows 用 npm.cmd）
+fn npm_cmd() -> &'static str {
+    if cfg!(windows) { "npm.cmd" } else { "npm" }
+}
+
 /// 检查单个 CLI 工具的最新版本（通过 npm view）
 #[tauri::command]
 pub fn check_tool_update(tool: String) -> Result<serde_json::Value, String> {
@@ -772,7 +777,7 @@ pub fn check_tool_update(tool: String) -> Result<serde_json::Value, String> {
         _ => return Err("不支持更新检查".to_string()),
     };
 
-    let output = silent_command("npm")
+    let output = silent_command(npm_cmd())
         .args(["view", npm_pkg, "version"])
         .output()
         .map_err(|e| format!("npm 执行失败: {}", e))?;
@@ -788,7 +793,7 @@ pub fn check_tool_update(tool: String) -> Result<serde_json::Value, String> {
 /// 安装 CLI 工具（npm install -g）
 #[tauri::command]
 pub fn install_cli_tool(pkg: String) -> Result<String, String> {
-    let output = silent_command("npm")
+    let output = silent_command(npm_cmd())
         .args(["install", "-g", &pkg])
         .output()
         .map_err(|e| format!("npm 执行失败: {}", e))?;
