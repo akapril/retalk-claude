@@ -95,8 +95,10 @@ let contextSession = null; // Feature 4: 右键菜单关联的会话
 let compareOpen = false;   // Feature 5(会话对比): 对比视图状态
 let ecoOpen = false;       // 生态面板状态
 let ecoTab = "plugins";    // 生态面板当前标签: "plugins" | "skills" | "mcp" | "configs"
-let pluginTool = "claude"; // 插件子标签: "claude" | "gemini"
+let pluginTool = "claude"; // 插件子标签: "claude" | "codex" | "gemini"
 let pluginView = "installed"; // 插件视图: "installed" | "available"
+let skillToolFilter = "claude"; // skills 工具筛选
+let mcpToolFilter = "claude"; // mcp 工具筛选
 let multiSelectMode = false; // Feature 6(批量操作): 多选模式
 let multiSelected = new Set(); // Feature 6: 已选会话 ID 集合
 let providerStatus = [];   // Feature 1(空状态引导): provider 可用状态
@@ -713,39 +715,50 @@ function renderEcosystem(data) {
       }
     }
   } else if (ecoTab === "skills") {
-    if (data.skills.length === 0) {
-      contentHtml = '<div class="eco-empty">未检测到 Skills</div>';
+    // 按工具分组，二级导航
+    const skillTools = [...new Set(data.skills.map(s => s.tool))];
+    if (!skillTools.includes(skillToolFilter)) skillToolFilter = skillTools[0] || "claude";
+
+    contentHtml += `<div class="eco-sub-nav"><div class="eco-sub-tabs">`;
+    skillTools.forEach(tool => {
+      const count = data.skills.filter(s => s.tool === tool).length;
+      contentHtml += `<button class="eco-sub-tab ${skillToolFilter === tool ? 'active' : ''}" data-skilltool="${tool}">${escapeHtml(tool)} (${count})</button>`;
+    });
+    contentHtml += `</div></div>`;
+
+    const filteredSkills = data.skills.filter(s => s.tool === skillToolFilter);
+    if (filteredSkills.length === 0) {
+      contentHtml += '<div class="eco-empty">未检测到 Skills</div>';
     } else {
-      const byTool = {};
-      data.skills.forEach(s => {
-        if (!byTool[s.tool]) byTool[s.tool] = [];
-        byTool[s.tool].push(s);
-      });
-      Object.entries(byTool).forEach(([tool, items]) => {
-        contentHtml += `<div class="eco-tool-group"><div class="eco-tool-name">${escapeHtml(tool)} (${items.length})</div>`;
-        items.forEach(s => {
-          contentHtml += `
-            <div class="eco-item">
-              <span class="eco-item-name">${escapeHtml(s.name)}</span>
-              <span class="eco-item-desc">${escapeHtml(s.description)}</span>
-              <span class="eco-item-meta">${escapeHtml(s.scope)}</span>
-            </div>`;
-        });
-        contentHtml += `</div>`;
+      filteredSkills.forEach(s => {
+        contentHtml += `
+          <div class="eco-plugin-card">
+            <div class="eco-plugin-header">
+              <span class="eco-plugin-name">${escapeHtml(s.name)}</span>
+              <span class="eco-plugin-status">${escapeHtml(s.scope)}</span>
+            </div>
+            <div class="eco-plugin-desc">${escapeHtml(s.description)}</div>
+          </div>`;
       });
     }
   } else if (ecoTab === "mcp") {
-    // 添加 MCP 服务器表单（带工具选择器）和触发按钮
+    // 按工具分组，二级导航
+    const mcpTools = [...new Set(data.mcp_servers.map(s => s.tool))];
+    if (!mcpTools.includes(mcpToolFilter)) mcpToolFilter = mcpTools[0] || "claude";
+
+    contentHtml += `<div class="eco-sub-nav"><div class="eco-sub-tabs">`;
+    mcpTools.forEach(tool => {
+      const count = data.mcp_servers.filter(s => s.tool === tool).length;
+      contentHtml += `<button class="eco-sub-tab ${mcpToolFilter === tool ? 'active' : ''}" data-mcptool="${tool}">${escapeHtml(tool)} (${count})</button>`;
+    });
+    contentHtml += `</div></div>`;
+
+    // 添加表单
     contentHtml += `
       <div class="eco-add-form" id="mcp-add-form" style="display:none">
-        <select class="eco-add-input" id="mcp-tool">
-          <option value="claude">Claude Code</option>
-          <option value="codex">Codex CLI</option>
-          <option value="gemini">Gemini CLI</option>
-        </select>
         <input class="eco-add-input" id="mcp-name" placeholder="名称 (如 github)" />
         <input class="eco-add-input" id="mcp-command" placeholder="命令 (如 npx)" />
-        <input class="eco-add-input eco-add-input-wide" id="mcp-args" placeholder="参数 (空格分隔，如 -y @modelcontextprotocol/server-github)" />
+        <input class="eco-add-input eco-add-input-wide" id="mcp-args" placeholder="参数 (空格分隔)" />
         <div class="eco-add-actions">
           <button class="eco-plugin-btn eco-plugin-btn-install" id="mcp-save-btn">添加</button>
           <button class="eco-plugin-btn" id="mcp-cancel-btn">取消</button>
@@ -754,26 +767,25 @@ function renderEcosystem(data) {
       <button class="eco-add-trigger" id="mcp-add-trigger">+ 添加 MCP 服务器</button>
     `;
 
-    if (data.mcp_servers.length === 0) {
+    const filteredMcp = data.mcp_servers.filter(s => s.tool === mcpToolFilter);
+    if (filteredMcp.length === 0) {
       contentHtml += '<div class="eco-empty">未检测到 MCP 服务器</div>';
     } else {
-      const byTool = {};
-      data.mcp_servers.forEach(s => {
-        if (!byTool[s.tool]) byTool[s.tool] = [];
-        byTool[s.tool].push(s);
-      });
-      Object.entries(byTool).forEach(([tool, items]) => {
-        contentHtml += `<div class="eco-tool-group"><div class="eco-tool-name">${escapeHtml(tool)} (${items.length})</div>`;
-        items.forEach(s => {
-          const cmdStr = [s.command, ...s.args].join(" ");
-          const toggleClass = s.enabled ? "on" : "off";
-          contentHtml += `
-            <div class="eco-item">
-              <span class="eco-item-name">${escapeHtml(s.name)}</span>
-              <span class="eco-item-desc" title="${escapeHtml(cmdStr)}">${escapeHtml(truncate(cmdStr, 40))}</span>
-              <button class="eco-toggle ${toggleClass}" data-source="${escapeHtml(s.source)}" data-server="${escapeHtml(s.name)}" data-enabled="${s.enabled}" title="${s.enabled ? '已启用' : '已禁用'}"></button>
-              <button class="eco-plugin-btn eco-plugin-btn-danger eco-mcp-remove" data-tool="${escapeHtml(s.tool)}" data-name="${escapeHtml(s.name)}" data-source="${escapeHtml(s.source)}" title="移除">移除</button>
-            </div>`;
+      filteredMcp.forEach(s => {
+        const cmdStr = [s.command, ...s.args].join(" ");
+        const toggleClass = s.enabled ? "on" : "off";
+        contentHtml += `
+          <div class="eco-plugin-card">
+            <div class="eco-plugin-header">
+              <span class="eco-plugin-name">${escapeHtml(s.name)}</span>
+              <span class="eco-plugin-status">${s.enabled ? '已启用' : '已禁用'}</span>
+            </div>
+            <div class="eco-plugin-desc" title="${escapeHtml(cmdStr)}">${escapeHtml(cmdStr)}</div>
+            <div class="eco-plugin-actions">
+              <button class="eco-toggle ${toggleClass}" data-source="${escapeHtml(s.source)}" data-server="${escapeHtml(s.name)}" data-enabled="${s.enabled}"></button>
+              <button class="eco-plugin-btn eco-plugin-btn-danger eco-mcp-remove" data-tool="${escapeHtml(s.tool)}" data-name="${escapeHtml(s.name)}" data-source="${escapeHtml(s.source)}">移除</button>
+            </div>
+          </div>`;
         });
         contentHtml += `</div>`;
       });
@@ -827,6 +839,21 @@ function renderEcosystem(data) {
   ecoPanel.querySelectorAll(".eco-sub-tab[data-pview]").forEach(tab => {
     tab.addEventListener("click", () => {
       pluginView = tab.dataset.pview;
+      renderEcosystem(data);
+    });
+  });
+
+  // Skills 工具切换
+  ecoPanel.querySelectorAll(".eco-sub-tab[data-skilltool]").forEach(tab => {
+    tab.addEventListener("click", () => {
+      skillToolFilter = tab.dataset.skilltool;
+      renderEcosystem(data);
+    });
+  });
+  // MCP 工具切换
+  ecoPanel.querySelectorAll(".eco-sub-tab[data-mcptool]").forEach(tab => {
+    tab.addEventListener("click", () => {
+      mcpToolFilter = tab.dataset.mcptool;
       renderEcosystem(data);
     });
   });
@@ -960,7 +987,7 @@ function renderEcosystem(data) {
     const mcpSaveBtn = ecoPanel.querySelector("#mcp-save-btn");
     if (mcpSaveBtn) {
       mcpSaveBtn.addEventListener("click", async () => {
-        const tool = (ecoPanel.querySelector("#mcp-tool").value || "claude");
+        const tool = mcpToolFilter || "claude";
         const name = (ecoPanel.querySelector("#mcp-name").value || "").trim();
         const command = (ecoPanel.querySelector("#mcp-command").value || "").trim();
         const argsStr = (ecoPanel.querySelector("#mcp-args").value || "").trim();
