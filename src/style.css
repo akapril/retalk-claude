@@ -1152,6 +1152,106 @@ html, body {
 select.eco-add-input { cursor: pointer; }
 .eco-mcp-remove { margin-left: 6px; padding: 1px 6px !important; font-size: 10px !important; flex-shrink: 0; }
 
+/* ======================== 新建会话面板 ======================== */
+.new-session-panel {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px;
+}
+
+.ns-section {
+  margin-bottom: 12px;
+}
+
+.ns-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.ns-tools {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ns-tool-item {
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  background: var(--bg-item);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  transition: all 0.15s;
+}
+
+.ns-tool-item:hover {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
+.ns-tool-item.active {
+  background: var(--text-highlight);
+  color: #fff;
+  border-color: var(--text-highlight);
+}
+
+.ns-path-input {
+  width: 100%;
+  background: var(--bg-item);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 10px;
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.ns-path-input:focus {
+  border-color: var(--text-highlight);
+}
+
+.ns-projects {
+  max-height: 200px;
+  overflow-y: auto;
+  margin-top: 4px;
+}
+
+.ns-project-item {
+  padding: 5px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--text-dim);
+  border-radius: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ns-project-item:hover {
+  background: var(--bg-item-hover);
+  color: var(--text);
+}
+
+.ns-project-item.active {
+  background: var(--bg-item-selected);
+  color: var(--text-highlight);
+}
+
+.ns-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
 /* ======================== Light theme overrides ======================== */
 :root[data-theme="light"] .icon-dropdown-menu,
 :root[data-theme="light"] .custom-select-menu,

@@ -13,6 +13,7 @@ const i18n = {
     resume: "恢复会话", openVscode: "在 VS Code 中打开", openExplorer: "在文件管理器中打开",
     copyPath: "复制项目路径", copyCmd: "复制恢复命令", exportMd: "导出 Markdown",
     exportFile: "导出到文件", compare: "对比工具", newSession: "新建会话",
+    selectTool: "选择工具", selectProject: "选择项目目录", recentProjects: "最近项目", customPath: "自定义路径...", startSession: "启动",
     settings: "设置", stats: "统计", ecosystem: "生态",
     hotkey: "全局快捷键", terminal: "首选终端", autoDetect: "自动检测",
     openMode: "双击默认动作", resumeTerminal: "恢复到终端", openInVscode: "在 VS Code 中打开",
@@ -40,6 +41,7 @@ const i18n = {
     resume: "Resume Session", openVscode: "Open in VS Code", openExplorer: "Open in File Manager",
     copyPath: "Copy Project Path", copyCmd: "Copy Resume Command", exportMd: "Export Markdown",
     exportFile: "Export to File", compare: "Compare Tools", newSession: "New Session",
+    selectTool: "Select Tool", selectProject: "Select Project Directory", recentProjects: "Recent Projects", customPath: "Custom path...", startSession: "Start",
     settings: "Settings", stats: "Statistics", ecosystem: "Ecosystem",
     hotkey: "Global Hotkey", terminal: "Preferred Terminal", autoDetect: "Auto Detect",
     openMode: "Default Open Action", resumeTerminal: "Resume in Terminal", openInVscode: "Open in VS Code",
@@ -247,6 +249,137 @@ async function waitForReady() {
       await new Promise((r) => setTimeout(r, 500));
     }
   }
+}
+
+// === 新建会话面板 ===
+let newSessionOpen = false;
+const newSessionBtn = document.getElementById("new-session-btn");
+
+newSessionBtn.addEventListener("click", async () => {
+  if (newSessionOpen) {
+    closeNewSession();
+  } else {
+    await openNewSession();
+  }
+});
+
+async function openNewSession() {
+  newSessionOpen = true;
+  settingsOpen = false;
+  statsOpen = false;
+  ecoOpen = false;
+  compareOpen = false;
+  sessionList.style.display = "none";
+  previewPanel.style.display = "none";
+  settingsPanel.style.display = "none";
+  statsPanel.style.display = "none";
+  const ecoPanel = document.getElementById("eco-panel");
+  if (ecoPanel) ecoPanel.style.display = "none";
+
+  let panel = document.getElementById("new-session-panel");
+  if (!panel) {
+    panel = document.createElement("div");
+    panel.id = "new-session-panel";
+    panel.className = "new-session-panel";
+    document.getElementById("app").insertBefore(panel, statusBar);
+  }
+  panel.style.display = "";
+
+  // 获取项目路径列表
+  let projectPaths = [];
+  try {
+    projectPaths = await invoke("get_project_paths");
+  } catch (_) {}
+
+  const toolOptions = ["claude", "codex", "gemini", "opencode", "kilo"]
+    .map(t => `<div class="ns-tool-item ${t === 'claude' ? 'active' : ''}" data-tool="${t}">${t}</div>`)
+    .join("");
+
+  const projectItems = projectPaths.slice(0, 20).map(p => {
+    const name = p.split(/[/\\]/).pop() || p;
+    return `<div class="ns-project-item" data-path="${escapeHtml(p)}" title="${escapeHtml(p)}">${escapeHtml(name)}</div>`;
+  }).join("");
+
+  panel.innerHTML = `
+    <div class="ns-section">
+      <div class="ns-label">${t.selectTool}</div>
+      <div class="ns-tools">${toolOptions}</div>
+    </div>
+    <div class="ns-section">
+      <div class="ns-label">${t.selectProject}</div>
+      <input class="ns-path-input" id="ns-custom-path" placeholder="${t.customPath}" />
+      <div class="ns-label" style="margin-top:8px;font-size:10px;opacity:0.6">${t.recentProjects}</div>
+      <div class="ns-projects">${projectItems || `<div class="eco-empty">${t.noResults}</div>`}</div>
+    </div>
+    <div class="ns-actions">
+      <button class="settings-btn-primary" id="ns-start">${t.startSession}</button>
+      <button class="settings-btn" id="ns-cancel">${t.cancel}</button>
+    </div>
+  `;
+
+  let selectedTool = "claude";
+  let selectedPath = "";
+
+  // 工具选择
+  panel.querySelectorAll(".ns-tool-item").forEach(item => {
+    item.addEventListener("click", () => {
+      panel.querySelectorAll(".ns-tool-item").forEach(i => i.classList.remove("active"));
+      item.classList.add("active");
+      selectedTool = item.dataset.tool;
+    });
+  });
+
+  // 项目选择
+  panel.querySelectorAll(".ns-project-item").forEach(item => {
+    item.addEventListener("click", () => {
+      panel.querySelectorAll(".ns-project-item").forEach(i => i.classList.remove("active"));
+      item.classList.add("active");
+      selectedPath = item.dataset.path;
+      document.getElementById("ns-custom-path").value = selectedPath;
+    });
+  });
+
+  // 自定义路径
+  document.getElementById("ns-custom-path").addEventListener("input", (e) => {
+    selectedPath = e.target.value.trim();
+    panel.querySelectorAll(".ns-project-item").forEach(i => i.classList.remove("active"));
+  });
+
+  // 启动
+  document.getElementById("ns-start").addEventListener("click", async () => {
+    const path = document.getElementById("ns-custom-path").value.trim() || selectedPath;
+    if (!path) {
+      showToast(t.selectProject);
+      return;
+    }
+    try {
+      await invoke("new_session", { projectPath: path, provider: selectedTool });
+      closeNewSession();
+      await appWindow.hide();
+    } catch (e) {
+      showToast(String(e));
+    }
+  });
+
+  // 取消
+  document.getElementById("ns-cancel").addEventListener("click", closeNewSession);
+
+  // 输入框阻止全局快捷键
+  document.getElementById("ns-custom-path").addEventListener("keydown", (e) => {
+    e.stopPropagation();
+    if (e.key === "Escape") closeNewSession();
+  });
+
+  updateStatusBar();
+}
+
+function closeNewSession() {
+  newSessionOpen = false;
+  const panel = document.getElementById("new-session-panel");
+  if (panel) panel.style.display = "none";
+  sessionList.style.display = "";
+  searchInput.focus();
+  updateStatusBar();
 }
 
 // === 设置面板 ===
@@ -1616,6 +1749,8 @@ document.addEventListener("keydown", async (e) => {
       hideContextMenu();
     } else if (multiSelectMode) {
       exitMultiSelect();
+    } else if (newSessionOpen) {
+      closeNewSession();
     } else if (ecoOpen) {
       closeEco();
     } else if (compareOpen) {
@@ -1760,6 +1895,10 @@ function updateStatusBar() {
   if (!statusBar) return;
   if (multiSelectMode) {
     statusBar.innerHTML = `<span>已选 ${multiSelected.size} 项</span><span>Esc 取消</span>`;
+    return;
+  }
+  if (newSessionOpen) {
+    statusBar.innerHTML = `<span>${t.back}</span>`;
     return;
   }
   if (ecoOpen) {

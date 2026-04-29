@@ -195,6 +195,7 @@ pub fn run() {
             commands::list_sessions,
             commands::resume_session,
             commands::new_session,
+            commands::get_project_paths,
             commands::copy_command,
             commands::get_stats,
             commands::get_config,

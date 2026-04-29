@@ -187,6 +187,19 @@ pub fn new_session(
     result.map(|_| ()).map_err(|e| format!("启动终端失败: {}", e))
 }
 
+/// 获取所有已知项目路径（去重，用于新建会话时快速选择）
+#[tauri::command]
+pub fn get_project_paths(state: State<AppState>) -> Vec<String> {
+    let sessions = state.sessions.lock();
+    let mut paths: Vec<String> = sessions.iter()
+        .map(|s| s.project_path.clone())
+        .filter(|p| !p.starts_with("gemini:") && !p.is_empty())
+        .collect();
+    paths.sort();
+    paths.dedup();
+    paths
+}
+
 /// 构建 resume 命令字符串（用于复制到剪贴板）
 #[tauri::command]
 pub fn copy_command(
