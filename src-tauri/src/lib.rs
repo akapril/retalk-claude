@@ -26,7 +26,12 @@ pub fn toggle_window(app: &tauri::AppHandle) {
         if window.is_visible().unwrap_or(false) {
             let _ = window.hide();
         } else {
-            let _ = window.center();
+            // 只在首次显示时居中，之后保持用户调整的位置
+            let pos = window.outer_position().ok();
+            let needs_center = pos.map(|p| p.x == 0 && p.y == 0).unwrap_or(true);
+            if needs_center {
+                let _ = window.center();
+            }
             let _ = window.show();
             let _ = window.set_focus();
         }
@@ -189,6 +194,7 @@ pub fn run() {
             commands::search,
             commands::list_sessions,
             commands::resume_session,
+            commands::new_session,
             commands::copy_command,
             commands::get_stats,
             commands::get_config,

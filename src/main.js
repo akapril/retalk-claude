@@ -12,7 +12,7 @@ const i18n = {
     today: "今天", yesterday: "昨天", thisWeek: "本周", thisMonth: "本月", earlier: "更早",
     resume: "恢复会话", openVscode: "在 VS Code 中打开", openExplorer: "在文件管理器中打开",
     copyPath: "复制项目路径", copyCmd: "复制恢复命令", exportMd: "导出 Markdown",
-    exportFile: "导出到文件", compare: "对比工具",
+    exportFile: "导出到文件", compare: "对比工具", newSession: "新建会话",
     settings: "设置", stats: "统计", ecosystem: "生态",
     hotkey: "全局快捷键", terminal: "首选终端", autoDetect: "自动检测",
     openMode: "双击默认动作", resumeTerminal: "恢复到终端", openInVscode: "在 VS Code 中打开",
@@ -39,7 +39,7 @@ const i18n = {
     today: "Today", yesterday: "Yesterday", thisWeek: "This Week", thisMonth: "This Month", earlier: "Earlier",
     resume: "Resume Session", openVscode: "Open in VS Code", openExplorer: "Open in File Manager",
     copyPath: "Copy Project Path", copyCmd: "Copy Resume Command", exportMd: "Export Markdown",
-    exportFile: "Export to File", compare: "Compare Tools",
+    exportFile: "Export to File", compare: "Compare Tools", newSession: "New Session",
     settings: "Settings", stats: "Statistics", ecosystem: "Ecosystem",
     hotkey: "Global Hotkey", terminal: "Preferred Terminal", autoDetect: "Auto Detect",
     openMode: "Default Open Action", resumeTerminal: "Resume in Terminal", openInVscode: "Open in VS Code",
@@ -1432,6 +1432,14 @@ contextMenu.querySelectorAll(".ctx-item").forEach((item) => {
     hideContextMenu();
 
     switch (action) {
+      case "new-session":
+        try {
+          await invoke("new_session", { projectPath: s.project_path, provider: s.provider });
+          await appWindow.hide();
+        } catch (e) {
+          showToast(String(e));
+        }
+        break;
       case "resume":
         await resumeSession(s);
         break;

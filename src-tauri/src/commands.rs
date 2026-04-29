@@ -116,6 +116,77 @@ pub fn resume_session(
     terminal::resume_in_terminal(&term, &provider, &project_path, &session_id)
 }
 
+/// 在终端中启动新的 CLI 会话
+#[tauri::command]
+pub fn new_session(
+    state: State<AppState>,
+    project_path: String,
+    provider: String,
+) -> Result<(), String> {
+    let config = state.config.lock();
+    let term = terminal::detect_terminal(&config.terminal.preferred);
+
+    // 构建 cd + tool 命令（无 --resume）
+    let cd_cmd = if cfg!(windows) {
+        format!("cd /d \"{}\"", project_path)
+    } else {
+        format!("cd \"{}\"", project_path)
+    };
+    let tool_cmd = match provider.as_str() {
+        "claude" => "claude",
+        "codex" => "codex",
+        "gemini" => "gemini",
+        "opencode" => "opencode",
+        "kilo" => "kilo",
+        _ => return Err("不支持的工具".to_string()),
+    };
+    let full_cmd = format!("{} && {}", cd_cmd, tool_cmd);
+
+    let project_name = std::path::Path::new(&project_path)
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy();
+
+    let result = match term {
+        terminal::TerminalKind::WindowsTerminal => {
+            std::process::Command::new("wt.exe")
+                .args(["new-tab", "--title", &format!("retalk: {}", project_name), "cmd", "/k", &full_cmd])
+                .spawn()
+        }
+        terminal::TerminalKind::PowerShell => {
+            let pwsh = if cfg!(windows) { "pwsh.exe" } else { "pwsh" };
+            std::process::Command::new(pwsh)
+                .args(["-NoExit", "-Command", &full_cmd])
+                .spawn()
+        }
+        terminal::TerminalKind::Cmd => {
+            std::process::Command::new("cmd.exe")
+                .args(["/k", &full_cmd])
+                .spawn()
+        }
+        #[cfg(target_os = "macos")]
+        terminal::TerminalKind::MacDefault => {
+            let script = format!("tell application \"Terminal\"\nactivate\ndo script \"{}\"\nend tell", full_cmd.replace("\"", "\\\""));
+            std::process::Command::new("osascript").args(["-e", &script]).spawn()
+        }
+        #[cfg(target_os = "macos")]
+        terminal::TerminalKind::MacIterm => {
+            let script = format!("tell application \"iTerm\"\nactivate\ntell current window\ncreate tab with default profile\ntell current session\nwrite text \"{}\"\nend tell\nend tell\nend tell", full_cmd.replace("\"", "\\\""));
+            std::process::Command::new("osascript").args(["-e", &script]).spawn()
+        }
+        #[cfg(target_os = "linux")]
+        terminal::TerminalKind::LinuxTerminal(ref term_name) => {
+            let shell_cmd = format!("{}; exec $SHELL", full_cmd);
+            std::process::Command::new(term_name).args(["--", "bash", "-c", &shell_cmd]).spawn()
+        }
+        _ => {
+            return Err("未找到可用终端".to_string());
+        }
+    };
+
+    result.map(|_| ()).map_err(|e| format!("启动终端失败: {}", e))
+}
+
 /// 构建 resume 命令字符串（用于复制到剪贴板）
 #[tauri::command]
 pub fn copy_command(
