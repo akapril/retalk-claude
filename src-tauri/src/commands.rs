@@ -761,6 +761,30 @@ pub fn get_ecosystem() -> crate::ecosystem::EcosystemData {
     crate::ecosystem::scan_ecosystem()
 }
 
+/// 检查单个 CLI 工具的最新版本（通过 npm view）
+#[tauri::command]
+pub fn check_tool_update(tool: String) -> Result<serde_json::Value, String> {
+    let npm_pkg = match tool.as_str() {
+        "claude" => "@anthropic-ai/claude-code",
+        "codex" => "@openai/codex",
+        "gemini" => "@google/gemini-cli",
+        "opencode" => "opencode-ai",
+        _ => return Err("不支持更新检查".to_string()),
+    };
+
+    let output = silent_command("npm")
+        .args(["view", npm_pkg, "version"])
+        .output()
+        .map_err(|e| format!("npm 执行失败: {}", e))?;
+
+    if output.status.success() {
+        let latest = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        Ok(serde_json::json!({ "tool": tool, "latest": latest, "package": npm_pkg }))
+    } else {
+        Err("无法获取最新版本".to_string())
+    }
+}
+
 #[tauri::command]
 pub fn toggle_mcp_server(server_name: String, source: String, enabled: bool) -> Result<(), String> {
     crate::ecosystem::toggle_mcp_in_file(&source, &server_name, enabled)

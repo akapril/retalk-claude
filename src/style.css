@@ -1022,6 +1022,9 @@ html, body {
 .eco-ov-version { font-size: 10px; color: var(--text-dim); background: rgba(255,255,255,0.06); padding: 1px 6px; border-radius: 3px; }
 .eco-ov-stats { display: flex; gap: 12px; font-size: 11px; color: var(--text-dim); margin-bottom: 4px; }
 .eco-ov-path { font-size: 10px; color: var(--text-dim); opacity: 0.5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eco-ov-update { font-size: 10px; margin-left: auto; padding: 1px 6px; border-radius: 3px; cursor: default; }
+.eco-ov-update-new { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+.eco-ov-update-ok { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
 
 /* 插件卡片 */
 .eco-plugin-card {

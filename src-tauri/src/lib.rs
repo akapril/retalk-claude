@@ -222,6 +222,7 @@ pub fn run() {
             commands::set_note,
             commands::get_all_notes,
             commands::get_ecosystem,
+            commands::check_tool_update,
             commands::toggle_mcp_server,
             commands::plugin_toggle,
             commands::plugin_install,

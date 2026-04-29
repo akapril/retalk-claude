@@ -789,19 +789,26 @@ function renderEcosystem(data) {
       });
     }
   } else if (ecoTab === "overview") {
+    // 工具名到 check key 的映射
+    const toolKeyMap = { "Claude Code": "claude", "Codex CLI": "codex", "Gemini CLI": "gemini", "OpenCode": "opencode", "Kilo Code": "kilo" };
+
+    contentHtml += `<button class="eco-add-trigger" id="check-updates-btn">检查更新</button>`;
+
     if (!data.overview || data.overview.length === 0) {
-      contentHtml = '<div class="eco-empty">未检测到工具</div>';
+      contentHtml += '<div class="eco-empty">未检测到工具</div>';
     } else {
       data.overview.forEach(t => {
+        const key = toolKeyMap[t.name] || "";
         const statusDot = t.installed
           ? '<span class="eco-ov-dot eco-ov-dot-on"></span>'
           : '<span class="eco-ov-dot eco-ov-dot-off"></span>';
         contentHtml += `
-          <div class="eco-ov-card ${t.installed ? '' : 'eco-ov-card-off'}">
+          <div class="eco-ov-card ${t.installed ? '' : 'eco-ov-card-off'}" data-tool-key="${key}">
             <div class="eco-ov-header">
               ${statusDot}
               <span class="eco-ov-name">${escapeHtml(t.name)}</span>
               <span class="eco-ov-version">${t.installed ? escapeHtml(t.version) : '未安装'}</span>
+              <span class="eco-ov-update" id="update-${key}" style="display:none"></span>
             </div>
             ${t.installed ? `
             <div class="eco-ov-stats">
@@ -825,6 +832,39 @@ function renderEcosystem(data) {
       renderEcosystem(data);
     });
   });
+
+  // 检查更新按钮
+  const checkUpdatesBtn = ecoPanel.querySelector("#check-updates-btn");
+  if (checkUpdatesBtn) {
+    checkUpdatesBtn.addEventListener("click", async () => {
+      checkUpdatesBtn.textContent = "检查中...";
+      checkUpdatesBtn.disabled = true;
+      const tools = ["claude", "codex", "gemini", "opencode"];
+      const results = await Promise.allSettled(
+        tools.map(t => invoke("check_tool_update", { tool: t }))
+      );
+      results.forEach((r, i) => {
+        const el = ecoPanel.querySelector(`#update-${tools[i]}`);
+        if (!el) return;
+        if (r.status === "fulfilled" && r.value) {
+          const latest = r.value.latest;
+          const card = el.closest(".eco-ov-card");
+          const currentVer = card?.querySelector(".eco-ov-version")?.textContent?.trim() || "";
+          if (latest && currentVer && latest !== currentVer) {
+            el.textContent = `→ ${latest}`;
+            el.className = "eco-ov-update eco-ov-update-new";
+            el.title = `npm i -g ${r.value.package}`;
+          } else {
+            el.textContent = "✓ 最新";
+            el.className = "eco-ov-update eco-ov-update-ok";
+          }
+          el.style.display = "";
+        }
+      });
+      checkUpdatesBtn.textContent = "检查更新";
+      checkUpdatesBtn.disabled = false;
+    });
+  }
 
   // 插件子导航：工具切换
   ecoPanel.querySelectorAll(".eco-sub-tab[data-ptool]").forEach(tab => {
