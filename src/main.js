@@ -200,7 +200,7 @@ async function openSettings() {
   updateStatusBar();
 
   // 先显示面板，localStorage 值立即填入（不阻塞）
-  document.getElementById("cfg-open-mode").value = localStorage.getItem("retalk_openMode") || "terminal";
+  setCustomSelectValue("cfg-open-mode", localStorage.getItem("retalk_openMode") || "terminal");
 
   // 并行加载后端数据
   const [configResult, autostartResult] = await Promise.allSettled([
@@ -212,7 +212,7 @@ async function openSettings() {
     const config = configResult.value;
     document.getElementById("cfg-hotkey").value = config.general.hotkey;
     document.getElementById("cfg-hotkey").dataset.lastValue = config.general.hotkey;
-    document.getElementById("cfg-terminal").value = config.terminal.preferred;
+    setCustomSelectValue("cfg-terminal", config.terminal.preferred);
     document.getElementById("cfg-watcher").checked = config.update.watcher_enabled;
     document.getElementById("cfg-poll").checked = config.update.poll_enabled;
     document.getElementById("cfg-poll-interval").value = config.update.poll_interval_secs;
@@ -241,7 +241,7 @@ document.getElementById("settings-save").addEventListener("click", async () => {
       hotkey: document.getElementById("cfg-hotkey").value,
     },
     terminal: {
-      preferred: document.getElementById("cfg-terminal").value,
+      preferred: getCustomSelectValue("cfg-terminal"),
     },
     update: {
       watcher_enabled: document.getElementById("cfg-watcher").checked,
@@ -258,7 +258,7 @@ document.getElementById("settings-save").addEventListener("click", async () => {
   try {
     await invoke("save_config", { newConfig });
     // 保存打开方式到 localStorage
-    localStorage.setItem("retalk_openMode", document.getElementById("cfg-open-mode").value);
+    localStorage.setItem("retalk_openMode", getCustomSelectValue("cfg-open-mode"));
     // Feature 8: 保存开机自启状态
     const autostart = document.getElementById("cfg-autostart").checked;
     await invoke("set_autostart", { enabled: autostart });
@@ -1913,4 +1913,56 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
+// === 自定义下拉组件 ===
+function initCustomSelects() {
+  document.querySelectorAll(".custom-select").forEach(sel => {
+    const display = sel.querySelector(".custom-select-display");
+    const menu = sel.querySelector(".custom-select-menu");
+
+    display.addEventListener("click", (e) => {
+      e.stopPropagation();
+      // 关闭其他
+      document.querySelectorAll(".custom-select.open").forEach(s => {
+        if (s !== sel) s.classList.remove("open");
+      });
+      sel.classList.toggle("open");
+    });
+
+    menu.querySelectorAll(".custom-select-item").forEach(item => {
+      item.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const val = item.dataset.value;
+        sel.dataset.value = val;
+        display.textContent = item.textContent;
+        menu.querySelectorAll(".custom-select-item").forEach(i => i.classList.remove("active"));
+        item.classList.add("active");
+        sel.classList.remove("open");
+      });
+    });
+  });
+
+  // 点击外部关闭
+  document.addEventListener("click", () => {
+    document.querySelectorAll(".custom-select.open").forEach(s => s.classList.remove("open"));
+  });
+}
+
+function setCustomSelectValue(id, value) {
+  const sel = document.getElementById(id);
+  if (!sel) return;
+  sel.dataset.value = value;
+  const item = sel.querySelector(`.custom-select-item[data-value="${value}"]`);
+  if (item) {
+    sel.querySelector(".custom-select-display").textContent = item.textContent;
+    sel.querySelectorAll(".custom-select-item").forEach(i => i.classList.remove("active"));
+    item.classList.add("active");
+  }
+}
+
+function getCustomSelectValue(id) {
+  const sel = document.getElementById(id);
+  return sel ? sel.dataset.value : "";
+}
+
+initCustomSelects();
 init();

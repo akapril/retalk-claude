@@ -361,8 +361,76 @@ html, body {
   outline: none;
 }
 
-.settings-input:focus, .settings-select:focus {
+.settings-input:focus {
   border-color: var(--text-highlight);
+}
+
+/* 自定义下拉（跨平台统一样式） */
+.custom-select {
+  position: relative;
+  min-width: 120px;
+}
+
+.custom-select-display {
+  background: var(--bg-item);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 4px 24px 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.custom-select-display::after {
+  content: '';
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 4px solid transparent;
+  border-top-color: var(--text-dim);
+}
+
+.custom-select.open .custom-select-display {
+  border-color: var(--text-highlight);
+}
+
+.custom-select-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 2px);
+  right: 0;
+  min-width: 100%;
+  background: rgba(40, 40, 40, 0.98);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 0;
+  z-index: 900;
+  backdrop-filter: blur(16px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.custom-select.open .custom-select-menu {
+  display: block;
+}
+
+.custom-select-item {
+  padding: 5px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.custom-select-item:hover {
+  background: var(--bg-item-hover);
+  color: var(--text);
+}
+
+.custom-select-item.active {
+  color: var(--text-highlight);
+  font-weight: 600;
 }
 
 .hotkey-input {

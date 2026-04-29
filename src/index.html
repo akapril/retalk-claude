@@ -75,22 +75,28 @@
         <div class="settings-title">打开方式</div>
         <div class="settings-row">
           <label>双击默认动作</label>
-          <select id="cfg-open-mode" class="settings-select">
-            <option value="terminal">恢复到终端</option>
-            <option value="vscode">在 VS Code 中打开</option>
-          </select>
+          <div class="custom-select" id="cfg-open-mode" data-value="terminal">
+            <div class="custom-select-display">恢复到终端</div>
+            <div class="custom-select-menu">
+              <div class="custom-select-item active" data-value="terminal">恢复到终端</div>
+              <div class="custom-select-item" data-value="vscode">在 VS Code 中打开</div>
+            </div>
+          </div>
         </div>
       </div>
       <div class="settings-section">
         <div class="settings-title">终端</div>
         <div class="settings-row">
           <label>首选终端</label>
-          <select id="cfg-terminal" class="settings-select">
-            <option value="auto">自动检测</option>
-            <option value="wt">Windows Terminal</option>
-            <option value="pwsh">PowerShell</option>
-            <option value="cmd">CMD</option>
-          </select>
+          <div class="custom-select" id="cfg-terminal" data-value="auto">
+            <div class="custom-select-display">自动检测</div>
+            <div class="custom-select-menu">
+              <div class="custom-select-item active" data-value="auto">自动检测</div>
+              <div class="custom-select-item" data-value="wt">Windows Terminal</div>
+              <div class="custom-select-item" data-value="pwsh">PowerShell</div>
+              <div class="custom-select-item" data-value="cmd">CMD</div>
+            </div>
+          </div>
         </div>
       </div>
       <div class="settings-section">
