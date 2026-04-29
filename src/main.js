@@ -786,8 +786,6 @@ function renderEcosystem(data) {
               <button class="eco-plugin-btn eco-plugin-btn-danger eco-mcp-remove" data-tool="${escapeHtml(s.tool)}" data-name="${escapeHtml(s.name)}" data-source="${escapeHtml(s.source)}">移除</button>
             </div>
           </div>`;
-        });
-        contentHtml += `</div>`;
       });
     }
   } else if (ecoTab === "overview") {
