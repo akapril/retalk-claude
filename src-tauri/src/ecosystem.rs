@@ -87,6 +87,7 @@ pub fn scan_ecosystem() -> EcosystemData {
     scan_claude_mcp(&mut mcp_servers);
 
     // Codex CLI
+    scan_codex_skills(&mut skills);
     scan_codex_mcp(&mut mcp_servers);
 
     // Gemini CLI
@@ -98,8 +99,9 @@ pub fn scan_ecosystem() -> EcosystemData {
     // Kilo Code
     scan_kilo_mcp(&mut mcp_servers);
 
-    // Claude Code 插件
-    let plugins = scan_claude_plugins();
+    // Claude Code + Codex CLI 插件
+    let mut plugins = scan_claude_plugins();
+    plugins.extend(scan_codex_plugins());
     let available_plugins = scan_available_plugins(&plugins);
 
     // Gemini 扩展
@@ -1003,4 +1005,111 @@ pub fn add_mcp_server(name: &str, command: &str, args: &[String]) -> Result<(), 
     let output = serde_json::to_string_pretty(&data).map_err(|e| format!("序列化失败: {}", e))?;
     fs::write(&path, output).map_err(|e| format!("写入 settings.json 失败: {}", e))?;
     Ok(())
+}
+
+// ============================================================
+// Codex CLI 插件和 Skills 扫描
+// ============================================================
+
+fn scan_codex_skills(skills: &mut Vec<SkillInfo>) {
+    let home = dirs::home_dir().unwrap_or_default();
+    let plugins_cache = home.join(".codex").join("plugins").join("cache");
+    if !plugins_cache.exists() { return; }
+
+    // 结构: cache/<marketplace>/<plugin>/<hash>/skills/<skill>/SKILL.md
+    if let Ok(marketplaces) = fs::read_dir(&plugins_cache) {
+        for mp in marketplaces.flatten() {
+            if !mp.path().is_dir() { continue; }
+            if let Ok(plugins) = fs::read_dir(mp.path()) {
+                for plugin in plugins.flatten() {
+                    if !plugin.path().is_dir() { continue; }
+                    let plugin_name = plugin.path().file_name().unwrap_or_default().to_string_lossy().to_string();
+                    // 找最新版本
+                    let mut versions: Vec<_> = fs::read_dir(plugin.path())
+                        .into_iter().flatten().flatten()
+                        .filter(|e| e.path().is_dir())
+                        .collect();
+                    versions.sort_by(|a, b| b.file_name().cmp(&a.file_name()));
+                    if let Some(ver) = versions.first() {
+                        let skills_dir = ver.path().join("skills");
+                        if skills_dir.exists() {
+                            scan_skill_dir(&skills_dir, "codex", &format!("plugin:{}", plugin_name), skills);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn scan_codex_plugins() -> Vec<PluginInfo> {
+    let home = dirs::home_dir().unwrap_or_default();
+    let plugins_cache = home.join(".codex").join("plugins").join("cache");
+    if !plugins_cache.exists() { return Vec::new(); }
+
+    let mut plugins = Vec::new();
+
+    if let Ok(marketplaces) = fs::read_dir(&plugins_cache) {
+        for mp in marketplaces.flatten() {
+            if !mp.path().is_dir() { continue; }
+            let marketplace = mp.path().file_name().unwrap_or_default().to_string_lossy().to_string();
+
+            if let Ok(plugin_dirs) = fs::read_dir(mp.path()) {
+                for plugin_entry in plugin_dirs.flatten() {
+                    if !plugin_entry.path().is_dir() { continue; }
+                    let plugin_name = plugin_entry.path().file_name().unwrap_or_default().to_string_lossy().to_string();
+
+                    // 找最新版本
+                    let mut versions: Vec<_> = fs::read_dir(plugin_entry.path())
+                        .into_iter().flatten().flatten()
+                        .filter(|e| e.path().is_dir())
+                        .collect();
+                    versions.sort_by(|a, b| b.file_name().cmp(&a.file_name()));
+
+                    if let Some(ver) = versions.first() {
+                        let install_path = ver.path().to_string_lossy().to_string();
+
+                        // 读取 plugin.json
+                        let plugin_json = ver.path().join(".codex-plugin").join("plugin.json");
+                        let (version, description) = if plugin_json.exists() {
+                            fs::read_to_string(&plugin_json).ok()
+                                .and_then(|c| serde_json::from_str::<serde_json::Value>(&c).ok())
+                                .map(|d| (
+                                    d.get("version").and_then(|v| v.as_str()).unwrap_or("unknown").to_string(),
+                                    d.get("description").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                                ))
+                                .unwrap_or(("unknown".to_string(), String::new()))
+                        } else {
+                            ("unknown".to_string(), String::new())
+                        };
+
+                        let has_skills = ver.path().join("skills").exists();
+                        let has_mcp = ver.path().join(".mcp.json").exists();
+                        let skill_count = if has_skills {
+                            fs::read_dir(ver.path().join("skills"))
+                                .map(|entries| entries.flatten().filter(|e| e.path().is_dir()).count() as u32)
+                                .unwrap_or(0)
+                        } else { 0 };
+
+                        plugins.push(PluginInfo {
+                            name: plugin_name.clone(),
+                            marketplace: format!("codex:{}", marketplace),
+                            version,
+                            description,
+                            scope: "user".to_string(),
+                            installed_at: String::new(),
+                            install_path,
+                            has_skills,
+                            has_mcp,
+                            skill_count,
+                            enabled: true,
+                            full_id: format!("{}@{}", plugin_name, marketplace),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    plugins
 }

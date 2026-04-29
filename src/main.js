@@ -591,7 +591,8 @@ function renderEcosystem(data) {
     contentHtml += `
       <div class="eco-sub-nav">
         <div class="eco-sub-tabs">
-          <button class="eco-sub-tab ${pluginTool === 'claude' ? 'active' : ''}" data-ptool="claude">Claude (${data.plugins.length})</button>
+          <button class="eco-sub-tab ${pluginTool === 'claude' ? 'active' : ''}" data-ptool="claude">Claude (${data.plugins.filter(p => !p.marketplace.startsWith('codex:')).length})</button>
+          <button class="eco-sub-tab ${pluginTool === 'codex' ? 'active' : ''}" data-ptool="codex">Codex (${data.plugins.filter(p => p.marketplace.startsWith('codex:')).length})</button>
           <button class="eco-sub-tab ${pluginTool === 'gemini' ? 'active' : ''}" data-ptool="gemini">Gemini (${data.extensions.length})</button>
         </div>
         <div class="eco-sub-tabs">
@@ -600,12 +601,15 @@ function renderEcosystem(data) {
         </div>
       </div>`;
 
+    const claudePlugins = data.plugins.filter(p => !p.marketplace.startsWith("codex:"));
+    const codexPlugins = data.plugins.filter(p => p.marketplace.startsWith("codex:"));
+
     if (pluginTool === "claude") {
       if (pluginView === "installed") {
-        if (data.plugins.length === 0) {
+        if (claudePlugins.length === 0) {
           contentHtml += '<div class="eco-empty">暂无已安装的 Claude 插件</div>';
         } else {
-          data.plugins.forEach(p => {
+          claudePlugins.forEach(p => {
             const badges = [];
             if (p.has_skills) badges.push(`<span class="eco-badge eco-badge-skill">${p.skill_count} skills</span>`);
             if (p.has_mcp) badges.push('<span class="eco-badge eco-badge-mcp">MCP</span>');
@@ -649,6 +653,32 @@ function renderEcosystem(data) {
               </div>`;
           });
         }
+      }
+    } else if (pluginTool === "codex") {
+      if (pluginView === "installed") {
+        if (codexPlugins.length === 0) {
+          contentHtml += '<div class="eco-empty">暂无已安装的 Codex 插件</div>';
+        } else {
+          codexPlugins.forEach(p => {
+            const badges = [];
+            if (p.has_skills) badges.push(`<span class="eco-badge eco-badge-skill">${p.skill_count} skills</span>`);
+            if (p.has_mcp) badges.push('<span class="eco-badge eco-badge-mcp">MCP</span>');
+            contentHtml += `
+              <div class="eco-plugin-card">
+                <div class="eco-plugin-header">
+                  <span class="eco-plugin-name">${escapeHtml(p.name)}</span>
+                  <span class="eco-plugin-version">v${escapeHtml(p.version)}</span>
+                </div>
+                <div class="eco-plugin-desc">${escapeHtml(p.description)}</div>
+                <div class="eco-plugin-meta">
+                  <span>${escapeHtml(p.marketplace)}</span>
+                  ${badges.join("")}
+                </div>
+              </div>`;
+          });
+        }
+      } else {
+        contentHtml += '<div class="eco-empty">Codex 插件通过 marketplace 管理</div>';
       }
     } else if (pluginTool === "gemini") {
       if (pluginView === "installed") {
