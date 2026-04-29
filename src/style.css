@@ -114,6 +114,21 @@ html, body {
   font-weight: 600;
 }
 
+.dd-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+
+.dd-label {
+  padding: 4px 12px 2px;
+  font-size: 10px;
+  color: var(--text-dim);
+  opacity: 0.6;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
 .session-list {
   flex: 1;
   overflow-y: auto;

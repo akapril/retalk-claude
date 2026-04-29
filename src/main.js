@@ -40,8 +40,7 @@ const statsBtn = document.getElementById("stats-btn");
 const statsPanel = document.getElementById("stats-panel");
 const ecoBtn = document.getElementById("eco-btn");
 const ddProvider = document.getElementById("dd-provider");
-const ddView = document.getElementById("dd-view");
-const ddSort = document.getElementById("dd-sort");
+const ddViewSort = document.getElementById("dd-viewsort");
 const statusBar = document.getElementById("status-bar");
 const appWindow = getCurrentWindow();
 
@@ -92,17 +91,52 @@ setupDropdown(ddProvider, providerFilter, (val) => {
   loadSessions(); // 重新从后端查询，按 provider 过滤
 });
 
-setupDropdown(ddView, viewMode, (val) => {
-  viewMode = val;
-  localStorage.setItem("retalk_viewMode", viewMode);
-  render();
-});
+// 视图+排序合并下拉
+(function setupViewSort() {
+  const container = ddViewSort;
+  const btn = container.querySelector(".icon-btn");
+  const menu = container.querySelector(".icon-dropdown-menu");
 
-setupDropdown(ddSort, sortMode, (val) => {
-  sortMode = val;
-  localStorage.setItem("retalk_sortMode", sortMode);
-  render();
-});
+  // 初始化 active 状态
+  function updateActive() {
+    menu.querySelectorAll(".dd-item").forEach(item => {
+      const group = item.dataset.group;
+      const val = item.dataset.value;
+      if (group === "view") {
+        item.classList.toggle("active", val === viewMode);
+      } else if (group === "sort") {
+        item.classList.toggle("active", val === sortMode);
+      }
+    });
+  }
+  updateActive();
+
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    document.querySelectorAll(".icon-dropdown.open").forEach(d => {
+      if (d !== container) d.classList.remove("open");
+    });
+    container.classList.toggle("open");
+  });
+
+  menu.querySelectorAll(".dd-item").forEach(item => {
+    item.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const group = item.dataset.group;
+      const val = item.dataset.value;
+      if (group === "view") {
+        viewMode = val;
+        localStorage.setItem("retalk_viewMode", viewMode);
+      } else if (group === "sort") {
+        sortMode = val;
+        localStorage.setItem("retalk_sortMode", sortMode);
+      }
+      updateActive();
+      container.classList.remove("open");
+      render();
+    });
+  });
+})();
 
 async function init() {
   // 加载收藏和标签

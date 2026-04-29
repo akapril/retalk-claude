@@ -28,18 +28,16 @@
             <div class="dd-item" data-value="kilo">Kilo Code</div>
           </div>
         </div>
-        <div class="icon-dropdown" id="dd-view">
-          <button class="icon-btn" title="视图模式"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg></button>
+        <div class="icon-dropdown" id="dd-viewsort">
+          <button class="icon-btn" title="视图与排序"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg></button>
           <div class="icon-dropdown-menu">
-            <div class="dd-item active" data-value="project">按项目</div>
-            <div class="dd-item" data-value="timeline">时间线</div>
-          </div>
-        </div>
-        <div class="icon-dropdown" id="dd-sort">
-          <button class="icon-btn" title="排序方式"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 3v10M2 11l2 2 2-2M12 13V3M10 5l2-2 2 2"/></svg></button>
-          <div class="icon-dropdown-menu">
-            <div class="dd-item active" data-value="time">按时间</div>
-            <div class="dd-item" data-value="name">按名称</div>
+            <div class="dd-label">视图</div>
+            <div class="dd-item" data-group="view" data-value="project">按项目</div>
+            <div class="dd-item" data-group="view" data-value="timeline">时间线</div>
+            <div class="dd-sep"></div>
+            <div class="dd-label">排序</div>
+            <div class="dd-item" data-group="sort" data-value="time">按时间</div>
+            <div class="dd-item" data-group="sort" data-value="name">按名称</div>
           </div>
         </div>
         <button id="stats-btn" class="icon-btn" title="统计"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="8" width="3" height="6" rx="0.5"/><rect x="6.5" y="4" width="3" height="10" rx="0.5"/><rect x="11" y="2" width="3" height="12" rx="0.5"/></svg></button>
