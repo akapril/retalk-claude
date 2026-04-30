@@ -380,33 +380,38 @@ pub fn get_session_preview(
 // ============================================================
 
 #[tauri::command]
-pub fn get_project_git_info(project_path: String) -> Option<GitInfo> {
-    // 获取当前分支名
-    let branch_output = silent_command("git")
-        .args(["-C", &project_path, "rev-parse", "--abbrev-ref", "HEAD"])
-        .output()
-        .ok()?;
-    if !branch_output.status.success() {
-        return None;
-    }
-    let branch = String::from_utf8_lossy(&branch_output.stdout)
-        .trim()
-        .to_string();
+pub async fn get_project_git_info(project_path: String) -> Option<GitInfo> {
+    tauri::async_runtime::spawn_blocking(move || {
+        // 获取当前分支名
+        let branch_output = silent_command("git")
+            .args(["-C", &project_path, "rev-parse", "--abbrev-ref", "HEAD"])
+            .output()
+            .ok()?;
+        if !branch_output.status.success() {
+            return None;
+        }
+        let branch = String::from_utf8_lossy(&branch_output.stdout)
+            .trim()
+            .to_string();
 
-    // 获取未提交变更数
-    let status_output = silent_command("git")
-        .args(["-C", &project_path, "status", "--porcelain"])
-        .output()
-        .ok()?;
-    let dirty_count = String::from_utf8_lossy(&status_output.stdout)
-        .lines()
-        .filter(|l| !l.is_empty())
-        .count() as u32;
+        // 获取未提交变更数
+        let status_output = silent_command("git")
+            .args(["-C", &project_path, "status", "--porcelain"])
+            .output()
+            .ok()?;
+        let dirty_count = String::from_utf8_lossy(&status_output.stdout)
+            .lines()
+            .filter(|l| !l.is_empty())
+            .count() as u32;
 
-    Some(GitInfo {
-        branch,
-        dirty_count,
+        Some(GitInfo {
+            branch,
+            dirty_count,
+        })
     })
+    .await
+    .ok()
+    .flatten()
 }
 
 // ============================================================
@@ -869,9 +874,9 @@ fn npm_cmd() -> &'static str {
     if cfg!(windows) { "npm.cmd" } else { "npm" }
 }
 
-/// 检查单个 CLI 工具的最新版本（通过 npm view）
+/// 检查单个 CLI 工具的最新版本（通过 npm view，异步避免阻塞 UI）
 #[tauri::command]
-pub fn check_tool_update(tool: String) -> Result<serde_json::Value, String> {
+pub async fn check_tool_update(tool: String) -> Result<serde_json::Value, String> {
     let npm_pkg = match tool.as_str() {
         "claude" => "@anthropic-ai/claude-code",
         "codex" => "@openai/codex",
@@ -879,33 +884,42 @@ pub fn check_tool_update(tool: String) -> Result<serde_json::Value, String> {
         "opencode" => "opencode-ai",
         _ => return Err("不支持更新检查".to_string()),
     };
+    let npm_pkg = npm_pkg.to_string();
 
-    let output = silent_command(npm_cmd())
-        .args(["view", npm_pkg, "version"])
-        .output()
-        .map_err(|e| format!("npm 执行失败: {}", e))?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let output = silent_command(npm_cmd())
+            .args(["view", &npm_pkg, "version"])
+            .output()
+            .map_err(|e| format!("npm 执行失败: {}", e))?;
 
-    if output.status.success() {
-        let latest = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        Ok(serde_json::json!({ "tool": tool, "latest": latest, "package": npm_pkg }))
-    } else {
-        Err("无法获取最新版本".to_string())
-    }
+        if output.status.success() {
+            let latest = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            Ok(serde_json::json!({ "tool": tool, "latest": latest, "package": npm_pkg }))
+        } else {
+            Err("无法获取最新版本".to_string())
+        }
+    })
+    .await
+    .map_err(|e| format!("任务失败: {}", e))?
 }
 
-/// 安装 CLI 工具（npm install -g）
+/// 安装 CLI 工具（npm install -g，异步避免阻塞 UI）
 #[tauri::command]
-pub fn install_cli_tool(pkg: String) -> Result<String, String> {
-    let output = silent_command(npm_cmd())
-        .args(["install", "-g", &pkg])
-        .output()
-        .map_err(|e| format!("npm 执行失败: {}", e))?;
-    if output.status.success() {
-        Ok(format!("{} 安装成功", pkg))
-    } else {
-        let err = String::from_utf8_lossy(&output.stderr).to_string();
-        Err(format!("安装失败: {}", err))
-    }
+pub async fn install_cli_tool(pkg: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let output = silent_command(npm_cmd())
+            .args(["install", "-g", &pkg])
+            .output()
+            .map_err(|e| format!("npm 执行失败: {}", e))?;
+        if output.status.success() {
+            Ok(format!("{} 安装成功", pkg))
+        } else {
+            let err = String::from_utf8_lossy(&output.stderr).to_string();
+            Err(format!("安装失败: {}", err))
+        }
+    })
+    .await
+    .map_err(|e| format!("任务失败: {}", e))?
 }
 
 #[tauri::command]
@@ -918,47 +932,59 @@ pub fn toggle_mcp_server(server_name: String, source: String, enabled: bool) -> 
 // ============================================================
 
 #[tauri::command]
-pub fn plugin_toggle(plugin_id: String, enabled: bool) -> Result<String, String> {
-    let action = if enabled { "enable" } else { "disable" };
-    let output = silent_command("claude")
-        .args(["plugins", action, &plugin_id])
-        .output()
-        .map_err(|e| format!("执行失败: {}", e))?;
-    if output.status.success() {
-        Ok(format!("{} 已{}", plugin_id, if enabled { "启用" } else { "禁用" }))
-    } else {
-        let err = String::from_utf8_lossy(&output.stderr).to_string();
-        Err(format!("操作失败: {}", err))
-    }
+pub async fn plugin_toggle(plugin_id: String, enabled: bool) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let action = if enabled { "enable" } else { "disable" };
+        let output = silent_command("claude")
+            .args(["plugins", action, &plugin_id])
+            .output()
+            .map_err(|e| format!("执行失败: {}", e))?;
+        if output.status.success() {
+            Ok(format!("{} 已{}", plugin_id, if enabled { "启用" } else { "禁用" }))
+        } else {
+            let err = String::from_utf8_lossy(&output.stderr).to_string();
+            Err(format!("操作失败: {}", err))
+        }
+    })
+    .await
+    .map_err(|e| format!("任务失败: {}", e))?
 }
 
 #[tauri::command]
-pub fn plugin_uninstall(plugin_id: String) -> Result<String, String> {
-    let output = silent_command("claude")
-        .args(["plugins", "uninstall", &plugin_id])
-        .output()
-        .map_err(|e| format!("执行失败: {}", e))?;
-    if output.status.success() {
-        Ok(format!("{} 已卸载", plugin_id))
-    } else {
-        let err = String::from_utf8_lossy(&output.stderr).to_string();
-        Err(format!("卸载失败: {}", err))
-    }
+pub async fn plugin_uninstall(plugin_id: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let output = silent_command("claude")
+            .args(["plugins", "uninstall", &plugin_id])
+            .output()
+            .map_err(|e| format!("执行失败: {}", e))?;
+        if output.status.success() {
+            Ok(format!("{} 已卸载", plugin_id))
+        } else {
+            let err = String::from_utf8_lossy(&output.stderr).to_string();
+            Err(format!("卸载失败: {}", err))
+        }
+    })
+    .await
+    .map_err(|e| format!("任务失败: {}", e))?
 }
 
-/// 安装插件（调用 claude plugins install CLI）
+/// 安装插件（调用 claude plugins install CLI，异步避免阻塞 UI）
 #[tauri::command]
-pub fn plugin_install(plugin_id: String) -> Result<String, String> {
-    let output = silent_command("claude")
-        .args(["plugins", "install", &plugin_id])
-        .output()
-        .map_err(|e| format!("执行失败: {}", e))?;
-    if output.status.success() {
-        Ok(format!("{} 已安装", plugin_id))
-    } else {
-        let err = String::from_utf8_lossy(&output.stderr).to_string();
-        Err(format!("安装失败: {}", err))
-    }
+pub async fn plugin_install(plugin_id: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let output = silent_command("claude")
+            .args(["plugins", "install", &plugin_id])
+            .output()
+            .map_err(|e| format!("执行失败: {}", e))?;
+        if output.status.success() {
+            Ok(format!("{} 已安装", plugin_id))
+        } else {
+            let err = String::from_utf8_lossy(&output.stderr).to_string();
+            Err(format!("安装失败: {}", err))
+        }
+    })
+    .await
+    .map_err(|e| format!("任务失败: {}", e))?
 }
 
 /// 添加 MCP 服务器到 Claude Code settings.json
@@ -967,15 +993,19 @@ pub fn add_mcp_server_cmd(name: String, command: String, args: Vec<String>) -> R
     crate::ecosystem::add_mcp_server(&name, &command, &args)
 }
 
-/// 移除 MCP 服务器（通用：根据 tool 分发到 CLI 或文件删除）
+/// 移除 MCP 服务器（通用：根据 tool 分发到 CLI 或文件删除，异步）
 #[tauri::command]
-pub fn remove_mcp_server(tool: String, name: String, source: String) -> Result<String, String> {
+pub async fn remove_mcp_server(tool: String, name: String, source: String) -> Result<String, String> {
     match tool.as_str() {
-        "codex" => codex_mcp_remove(name),
+        "codex" => codex_mcp_remove(name).await,
         _ => {
-            // 从配置文件（settings.json / .mcp.json）中移除
-            crate::ecosystem::remove_mcp_from_file(&source, &name)?;
-            Ok(format!("{} 已移除", name))
+            // 从配置文件（settings.json / .mcp.json）中移除（文件 IO，用 spawn_blocking 包裹）
+            tauri::async_runtime::spawn_blocking(move || {
+                crate::ecosystem::remove_mcp_from_file(&source, &name)?;
+                Ok(format!("{} 已移除", name))
+            })
+            .await
+            .map_err(|e| format!("任务失败: {}", e))?
         }
     }
 }
@@ -984,106 +1014,132 @@ pub fn remove_mcp_server(tool: String, name: String, source: String) -> Result<S
 // Codex MCP 管理 — 调用 codex mcp CLI
 // ============================================================
 
-/// 添加 Codex MCP 服务器（调用 codex mcp add CLI）
+/// 添加 Codex MCP 服务器（调用 codex mcp add CLI，异步避免阻塞 UI）
 #[tauri::command]
-pub fn codex_mcp_add(name: String, command: String, args: Vec<String>) -> Result<String, String> {
-    let mut cmd_args = vec!["mcp".to_string(), "add".to_string(), name.clone(), "--".to_string()];
-    cmd_args.push(command);
-    cmd_args.extend(args);
-    let output = silent_command("codex")
-        .args(&cmd_args)
-        .output()
-        .map_err(|e| format!("执行失败: {}", e))?;
-    if output.status.success() {
-        Ok(format!("Codex MCP {} 已添加", name))
-    } else {
-        Err(String::from_utf8_lossy(&output.stderr).to_string())
-    }
+pub async fn codex_mcp_add(name: String, command: String, args: Vec<String>) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut cmd_args = vec!["mcp".to_string(), "add".to_string(), name.clone(), "--".to_string()];
+        cmd_args.push(command);
+        cmd_args.extend(args);
+        let output = silent_command("codex")
+            .args(&cmd_args)
+            .output()
+            .map_err(|e| format!("执行失败: {}", e))?;
+        if output.status.success() {
+            Ok(format!("Codex MCP {} 已添加", name))
+        } else {
+            Err(String::from_utf8_lossy(&output.stderr).to_string())
+        }
+    })
+    .await
+    .map_err(|e| format!("任务失败: {}", e))?
 }
 
-/// 移除 Codex MCP 服务器（调用 codex mcp remove CLI）
+/// 移除 Codex MCP 服务器（调用 codex mcp remove CLI，异步避免阻塞 UI）
 #[tauri::command]
-pub fn codex_mcp_remove(name: String) -> Result<String, String> {
-    let output = silent_command("codex")
-        .args(["mcp", "remove", &name])
-        .output()
-        .map_err(|e| format!("执行失败: {}", e))?;
-    if output.status.success() {
-        Ok(format!("Codex MCP {} 已移除", name))
-    } else {
-        Err(String::from_utf8_lossy(&output.stderr).to_string())
-    }
+pub async fn codex_mcp_remove(name: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let output = silent_command("codex")
+            .args(["mcp", "remove", &name])
+            .output()
+            .map_err(|e| format!("执行失败: {}", e))?;
+        if output.status.success() {
+            Ok(format!("Codex MCP {} 已移除", name))
+        } else {
+            Err(String::from_utf8_lossy(&output.stderr).to_string())
+        }
+    })
+    .await
+    .map_err(|e| format!("任务失败: {}", e))?
 }
 
 // ============================================================
 // Gemini 扩展管理 — 调用 gemini extensions CLI
 // ============================================================
 
-/// 安装 Gemini 扩展
+/// 安装 Gemini 扩展（异步避免阻塞 UI）
 #[tauri::command]
-pub fn gemini_ext_install(source: String) -> Result<String, String> {
-    let output = silent_command("gemini")
-        .args(["extensions", "install", &source])
-        .output()
-        .map_err(|e| format!("执行失败: {}", e))?;
-    if output.status.success() {
-        Ok("Gemini 扩展已安装".to_string())
-    } else {
-        Err(String::from_utf8_lossy(&output.stderr).to_string())
-    }
+pub async fn gemini_ext_install(source: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let output = silent_command("gemini")
+            .args(["extensions", "install", &source])
+            .output()
+            .map_err(|e| format!("执行失败: {}", e))?;
+        if output.status.success() {
+            Ok("Gemini 扩展已安装".to_string())
+        } else {
+            Err(String::from_utf8_lossy(&output.stderr).to_string())
+        }
+    })
+    .await
+    .map_err(|e| format!("任务失败: {}", e))?
 }
 
-/// 启用/禁用 Gemini 扩展
+/// 启用/禁用 Gemini 扩展（异步避免阻塞 UI）
 #[tauri::command]
-pub fn gemini_ext_toggle(name: String, enabled: bool) -> Result<String, String> {
-    let action = if enabled { "enable" } else { "disable" };
-    let output = silent_command("gemini")
-        .args(["extensions", action, &name])
-        .output()
-        .map_err(|e| format!("执行失败: {}", e))?;
-    if output.status.success() {
-        Ok(format!("{} 已{}", name, if enabled { "启用" } else { "禁用" }))
-    } else {
-        Err(String::from_utf8_lossy(&output.stderr).to_string())
-    }
+pub async fn gemini_ext_toggle(name: String, enabled: bool) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let action = if enabled { "enable" } else { "disable" };
+        let output = silent_command("gemini")
+            .args(["extensions", action, &name])
+            .output()
+            .map_err(|e| format!("执行失败: {}", e))?;
+        if output.status.success() {
+            Ok(format!("{} 已{}", name, if enabled { "启用" } else { "禁用" }))
+        } else {
+            Err(String::from_utf8_lossy(&output.stderr).to_string())
+        }
+    })
+    .await
+    .map_err(|e| format!("任务失败: {}", e))?
 }
 
-/// 卸载 Gemini 扩展
+/// 卸载 Gemini 扩展（异步避免阻塞 UI）
 #[tauri::command]
-pub fn gemini_ext_uninstall(name: String) -> Result<String, String> {
-    let output = silent_command("gemini")
-        .args(["extensions", "uninstall", &name])
-        .output()
-        .map_err(|e| format!("执行失败: {}", e))?;
-    if output.status.success() {
-        Ok(format!("{} 已卸载", name))
-    } else {
-        Err(String::from_utf8_lossy(&output.stderr).to_string())
-    }
+pub async fn gemini_ext_uninstall(name: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let output = silent_command("gemini")
+            .args(["extensions", "uninstall", &name])
+            .output()
+            .map_err(|e| format!("执行失败: {}", e))?;
+        if output.status.success() {
+            Ok(format!("{} 已卸载", name))
+        } else {
+            Err(String::from_utf8_lossy(&output.stderr).to_string())
+        }
+    })
+    .await
+    .map_err(|e| format!("任务失败: {}", e))?
 }
 
 #[tauri::command]
-pub fn plugin_update(plugin_id: String) -> Result<String, String> {
-    let output = silent_command("claude")
-        .args(["plugins", "update", &plugin_id])
-        .output()
-        .map_err(|e| format!("执行失败: {}", e))?;
-    if output.status.success() {
-        Ok(format!("{} 已更新", plugin_id))
-    } else {
-        let err = String::from_utf8_lossy(&output.stderr).to_string();
-        Err(format!("更新失败: {}", err))
-    }
+pub async fn plugin_update(plugin_id: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let output = silent_command("claude")
+            .args(["plugins", "update", &plugin_id])
+            .output()
+            .map_err(|e| format!("执行失败: {}", e))?;
+        if output.status.success() {
+            Ok(format!("{} 已更新", plugin_id))
+        } else {
+            let err = String::from_utf8_lossy(&output.stderr).to_string();
+            Err(format!("更新失败: {}", err))
+        }
+    })
+    .await
+    .map_err(|e| format!("任务失败: {}", e))?
 }
 
 // ============================================================
 // Feature 8: 开机自启（跨平台）
 // ============================================================
 
-/// 设置开机自启（跨平台）
+/// 设置开机自启（跨平台，异步避免注册表/文件 IO 阻塞 UI）
 #[tauri::command]
-pub fn set_autostart(enabled: bool) -> Result<(), String> {
-    set_autostart_impl(enabled)
+pub async fn set_autostart(enabled: bool) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || set_autostart_impl(enabled))
+        .await
+        .map_err(|e| format!("任务失败: {}", e))?
 }
 
 /// Windows: 通过注册表设置开机自启
@@ -1180,10 +1236,12 @@ fn set_autostart_impl(enabled: bool) -> Result<(), String> {
     Ok(())
 }
 
-/// 查询开机自启状态（跨平台）
+/// 查询开机自启状态（跨平台，异步避免注册表查询阻塞 UI）
 #[tauri::command]
-pub fn get_autostart() -> bool {
-    get_autostart_impl()
+pub async fn get_autostart() -> bool {
+    tauri::async_runtime::spawn_blocking(get_autostart_impl)
+        .await
+        .unwrap_or(false)
 }
 
 #[cfg(windows)]
