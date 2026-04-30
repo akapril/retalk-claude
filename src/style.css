@@ -448,6 +448,13 @@ html, body {
   font-weight: 600;
 }
 
+.settings-hint {
+  font-size: 10px;
+  color: var(--text-dim);
+  opacity: 0.6;
+  padding: 2px 0 0 0;
+}
+
 .hotkey-input {
   cursor: pointer;
   text-align: center;

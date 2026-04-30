@@ -34,6 +34,16 @@ pub enum TerminalKind {
     // Linux
     LinuxTerminal(String),
     LinuxFallback,
+    // 自定义命令模板 — {cmd} 和 {dir} 会被替换
+    Custom(String),
+}
+
+/// 根据用户偏好和自定义命令检测终端类型
+pub fn detect_terminal_with_custom(preferred: &str, custom_command: &str) -> TerminalKind {
+    if preferred == "custom" && !custom_command.is_empty() {
+        return TerminalKind::Custom(custom_command.to_string());
+    }
+    detect_terminal(preferred)
 }
 
 /// 根据用户偏好检测终端类型，"auto" 时自动探测系统可用终端
@@ -327,6 +337,25 @@ pub fn resume_in_terminal(
             Command::new("xterm")
                 .args(["-e", "bash", "-c", &shell_cmd])
                 .spawn()
+        }
+
+        // === 自定义终端 ===
+        TerminalKind::Custom(template) => {
+            // 模板中 {cmd} 替换为完整命令，{dir} 替换为项目目录
+            let full_cmd = build_resume_command(provider, project_path, session_id);
+            let resolved = template
+                .replace("{cmd}", &full_cmd)
+                .replace("{dir}", project_path);
+            // 用 shell 执行解析后的命令
+            if cfg!(windows) {
+                Command::new("cmd.exe")
+                    .args(["/c", &resolved])
+                    .spawn()
+            } else {
+                Command::new("sh")
+                    .args(["-c", &resolved])
+                    .spawn()
+            }
         }
     };
 

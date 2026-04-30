@@ -151,7 +151,7 @@ pub fn resume_session(
     provider: String,
 ) -> Result<(), String> {
     let config = state.config.lock();
-    let term = terminal::detect_terminal(&config.terminal.preferred);
+    let term = terminal::detect_terminal_with_custom(&config.terminal.preferred, &config.terminal.custom_command);
     terminal::resume_in_terminal(&term, &provider, &project_path, &session_id)
 }
 
@@ -163,7 +163,7 @@ pub fn new_session(
     provider: String,
 ) -> Result<(), String> {
     let config = state.config.lock();
-    let term = terminal::detect_terminal(&config.terminal.preferred);
+    let term = terminal::detect_terminal_with_custom(&config.terminal.preferred, &config.terminal.custom_command);
 
     // 构建 cd + tool 命令（无 --resume）
     let cd_cmd = if cfg!(windows) {

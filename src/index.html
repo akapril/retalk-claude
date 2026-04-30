@@ -100,6 +100,13 @@
             </div>
           </div>
         </div>
+        <div class="settings-row" id="custom-terminal-row" style="display:none">
+          <label>自定义命令</label>
+          <input type="text" id="cfg-custom-terminal" class="settings-input" style="width:220px" placeholder="如: /usr/bin/my-term -e {cmd}" />
+        </div>
+        <div class="settings-hint" id="custom-terminal-hint" style="display:none">
+          使用 {cmd} 表示要执行的命令，{dir} 表示项目目录
+        </div>
       </div>
       <div class="settings-section">
         <div class="settings-title">数据更新</div>

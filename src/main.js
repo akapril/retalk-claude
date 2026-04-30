@@ -280,12 +280,31 @@ function initPlatformTerminalOptions() {
     options.push({ value: "cmd", label: "CMD" });
   }
 
+  // 所有平台都加"自定义"选项
+  options.push({ value: "custom", label: LANG === "zh" ? "自定义..." : "Custom..." });
+
   menu.innerHTML = options
     .map(
       (o) =>
         `<div class="custom-select-item ${o.value === "auto" ? "active" : ""}" data-value="${o.value}">${o.label}</div>`
     )
     .join("");
+
+  // 选择变化时更新自定义输入框可见性
+  menu.querySelectorAll(".custom-select-item").forEach(item => {
+    item.addEventListener("click", () => {
+      setTimeout(updateCustomTerminalVisibility, 0);
+    });
+  });
+}
+
+/// 根据终端选择显示/隐藏自定义输入框
+function updateCustomTerminalVisibility() {
+  const val = getCustomSelectValue("cfg-terminal");
+  const row = document.getElementById("custom-terminal-row");
+  const hint = document.getElementById("custom-terminal-hint");
+  if (row) row.style.display = val === "custom" ? "" : "none";
+  if (hint) hint.style.display = val === "custom" ? "" : "none";
 }
 
 /// 等待后台数据扫描完成
@@ -474,6 +493,8 @@ async function openSettings() {
     document.getElementById("cfg-hotkey").value = config.general.hotkey;
     document.getElementById("cfg-hotkey").dataset.lastValue = config.general.hotkey;
     setCustomSelectValue("cfg-terminal", config.terminal.preferred);
+    document.getElementById("cfg-custom-terminal").value = localStorage.getItem("retalk_customTerminal") || "";
+    updateCustomTerminalVisibility();
     document.getElementById("cfg-watcher").checked = config.update.watcher_enabled;
     document.getElementById("cfg-poll").checked = config.update.poll_enabled;
     document.getElementById("cfg-poll-interval").value = config.update.poll_interval_secs;
@@ -504,6 +525,7 @@ document.getElementById("settings-save").addEventListener("click", async () => {
     },
     terminal: {
       preferred: getCustomSelectValue("cfg-terminal"),
+      custom_command: document.getElementById("cfg-custom-terminal").value.trim(),
     },
     update: {
       watcher_enabled: document.getElementById("cfg-watcher").checked,
@@ -521,6 +543,7 @@ document.getElementById("settings-save").addEventListener("click", async () => {
     await invoke("save_config", { newConfig });
     // 保存打开方式到 localStorage
     localStorage.setItem("retalk_openMode", getCustomSelectValue("cfg-open-mode"));
+    localStorage.setItem("retalk_customTerminal", document.getElementById("cfg-custom-terminal").value.trim());
     localStorage.setItem("retalk_defaultDir", document.getElementById("cfg-default-dir").value.trim());
     // 应用主题
     document.documentElement.dataset.theme = selectedTheme;

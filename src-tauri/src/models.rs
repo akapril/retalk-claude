@@ -63,6 +63,8 @@ pub struct GeneralConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TerminalConfig {
     pub preferred: String,
+    #[serde(default)]
+    pub custom_command: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -92,6 +94,7 @@ impl Default for AppConfig {
             },
             terminal: TerminalConfig {
                 preferred: "auto".to_string(),
+                custom_command: String::new(),
             },
             update: UpdateConfig {
                 watcher_enabled: true,
