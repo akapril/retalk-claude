@@ -41,6 +41,45 @@ pub struct AppState {
     pub ready: Arc<std::sync::atomic::AtomicBool>,
 }
 
+/// 自动探测默认工作目录：扫描常见路径，返回第一个存在且非空的目录
+#[tauri::command]
+pub fn detect_default_workspace() -> Option<String> {
+    let home = dirs::home_dir()?;
+    let candidates = if cfg!(windows) {
+        vec![
+            std::path::PathBuf::from("D:\\workspace"),
+            home.join("workspace"),
+            home.join("projects"),
+            home.join("code"),
+            std::path::PathBuf::from("C:\\dev"),
+        ]
+    } else if cfg!(target_os = "macos") {
+        vec![
+            home.join("workspace"),
+            home.join("projects"),
+            home.join("code"),
+            home.join("Developer"),
+        ]
+    } else {
+        vec![
+            home.join("workspace"),
+            home.join("projects"),
+            home.join("code"),
+            home.join("dev"),
+        ]
+    };
+
+    candidates
+        .into_iter()
+        .find(|p| {
+            p.is_dir()
+                && std::fs::read_dir(p)
+                    .map(|mut d| d.next().is_some())
+                    .unwrap_or(false)
+        })
+        .map(|p| p.to_string_lossy().to_string())
+}
+
 /// 检查后台数据是否就绪
 #[tauri::command]
 pub fn is_ready(state: State<AppState>) -> bool {
@@ -444,9 +483,14 @@ pub fn get_desktop_path() -> Result<String, String> {
 // Feature 4: 快捷操作 — 在 VS Code / 文件管理器中打开
 // ============================================================
 
+/// 获取 VS Code 命令名（Windows 用 code.cmd 避免闪 cmd 窗口）
+fn code_cmd() -> &'static str {
+    if cfg!(windows) { "code.cmd" } else { "code" }
+}
+
 #[tauri::command]
 pub fn open_in_vscode(project_path: String) -> Result<(), String> {
-    Command::new("code")
+    silent_command(code_cmd())
         .arg(&project_path)
         .spawn()
         .map(|_| ())

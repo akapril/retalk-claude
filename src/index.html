@@ -95,11 +95,8 @@
           <label>首选终端</label>
           <div class="custom-select" id="cfg-terminal" data-value="auto">
             <div class="custom-select-display">自动检测</div>
-            <div class="custom-select-menu">
-              <div class="custom-select-item active" data-value="auto">自动检测</div>
-              <div class="custom-select-item" data-value="wt">Windows Terminal</div>
-              <div class="custom-select-item" data-value="pwsh">PowerShell</div>
-              <div class="custom-select-item" data-value="cmd">CMD</div>
+            <div class="custom-select-menu" id="cfg-terminal-menu">
+              <!-- 由 JS 根据平台动态填充 -->
             </div>
           </div>
         </div>

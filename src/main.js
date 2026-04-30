@@ -215,6 +215,17 @@ setupDropdown(ddProvider, providerFilter, (val) => {
 })();
 
 async function init() {
+  // 平台检测 & 终端选项动态填充
+  initPlatformTerminalOptions();
+
+  // 自动探测默认工作目录（首次运行时）
+  if (!localStorage.getItem("retalk_defaultDir")) {
+    try {
+      const dir = await invoke("detect_default_workspace");
+      if (dir) localStorage.setItem("retalk_defaultDir", dir);
+    } catch (_) { /* 忽略 */ }
+  }
+
   // 加载收藏和标签
   try {
     favorites = await invoke("get_favorites");
@@ -237,6 +248,38 @@ async function init() {
   await new Promise((r) => setTimeout(r, 200));
   await loadSessions();
   searchInput.focus();
+}
+
+/// 根据平台动态填充终端下拉选项
+function initPlatformTerminalOptions() {
+  const menu = document.getElementById("cfg-terminal-menu");
+  if (!menu) return;
+
+  const isMac = navigator.platform.includes("Mac");
+  const isLinux = navigator.platform.includes("Linux");
+
+  let options = [{ value: "auto", label: t.autoDetect || "自动检测" }];
+  if (isMac) {
+    options.push({ value: "terminal", label: "Terminal" });
+    options.push({ value: "iterm", label: "iTerm2" });
+  } else if (isLinux) {
+    options.push({ value: "gnome-terminal", label: "GNOME Terminal" });
+    options.push({ value: "konsole", label: "Konsole" });
+    options.push({ value: "alacritty", label: "Alacritty" });
+    options.push({ value: "kitty", label: "Kitty" });
+  } else {
+    // Windows
+    options.push({ value: "wt", label: "Windows Terminal" });
+    options.push({ value: "pwsh", label: "PowerShell" });
+    options.push({ value: "cmd", label: "CMD" });
+  }
+
+  menu.innerHTML = options
+    .map(
+      (o) =>
+        `<div class="custom-select-item ${o.value === "auto" ? "active" : ""}" data-value="${o.value}">${o.label}</div>`
+    )
+    .join("");
 }
 
 /// 等待后台数据扫描完成
@@ -1749,7 +1792,9 @@ contextMenu.querySelectorAll(".ctx-item").forEach((item) => {
         try {
           const desktop = await invoke("get_desktop_path");
           const fileName = `${s.project_name}_${s.session_id.slice(0, 8)}.md`;
-          const filePath = `${desktop}\\${fileName}`;
+          // 使用原生路径分隔符（后端返回的 desktop 路径已包含正确分隔符）
+          const sep = navigator.platform.startsWith("Win") ? "\\" : "/";
+          const filePath = `${desktop}${sep}${fileName}`;
           await invoke("export_session_to_file", { sessionId: s.session_id, filePath });
           showToast("已保存到桌面: " + fileName);
           // 用资源管理器打开并选中文件

@@ -20,6 +20,47 @@ use tauri::{
 };
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
+/// 解析快捷键字符串（如 "Ctrl+Shift+R"）为 Shortcut 结构
+fn parse_hotkey(hotkey_str: &str) -> Option<Shortcut> {
+    let parts: Vec<&str> = hotkey_str.split('+').collect();
+    let mut mods = Modifiers::empty();
+    let mut key_code = None;
+
+    for part in &parts {
+        match part.trim() {
+            "Ctrl" | "Control" => mods |= Modifiers::CONTROL,
+            "Shift" => mods |= Modifiers::SHIFT,
+            "Alt" | "Option" => mods |= Modifiers::ALT,
+            "Cmd" | "Meta" | "Super" | "Command" => mods |= Modifiers::META,
+            key => {
+                key_code = match key.to_uppercase().as_str() {
+                    "A" => Some(Code::KeyA), "B" => Some(Code::KeyB), "C" => Some(Code::KeyC),
+                    "D" => Some(Code::KeyD), "E" => Some(Code::KeyE), "F" => Some(Code::KeyF),
+                    "G" => Some(Code::KeyG), "H" => Some(Code::KeyH), "I" => Some(Code::KeyI),
+                    "J" => Some(Code::KeyJ), "K" => Some(Code::KeyK), "L" => Some(Code::KeyL),
+                    "M" => Some(Code::KeyM), "N" => Some(Code::KeyN), "O" => Some(Code::KeyO),
+                    "P" => Some(Code::KeyP), "Q" => Some(Code::KeyQ), "R" => Some(Code::KeyR),
+                    "S" => Some(Code::KeyS), "T" => Some(Code::KeyT), "U" => Some(Code::KeyU),
+                    "V" => Some(Code::KeyV), "W" => Some(Code::KeyW), "X" => Some(Code::KeyX),
+                    "Y" => Some(Code::KeyY), "Z" => Some(Code::KeyZ),
+                    "0" => Some(Code::Digit0), "1" => Some(Code::Digit1), "2" => Some(Code::Digit2),
+                    "3" => Some(Code::Digit3), "4" => Some(Code::Digit4), "5" => Some(Code::Digit5),
+                    "6" => Some(Code::Digit6), "7" => Some(Code::Digit7), "8" => Some(Code::Digit8),
+                    "9" => Some(Code::Digit9),
+                    "SPACE" => Some(Code::Space),
+                    "ENTER" | "RETURN" => Some(Code::Enter),
+                    "TAB" => Some(Code::Tab),
+                    "ESCAPE" | "ESC" => Some(Code::Escape),
+                    _ => None,
+                };
+            }
+        }
+    }
+
+    let modifiers = if mods.is_empty() { None } else { Some(mods) };
+    key_code.map(|code| Shortcut::new(modifiers, code))
+}
+
 /// 切换窗口显隐（pub 供 commands::update_hotkey 调用）
 pub fn toggle_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
@@ -103,11 +144,14 @@ pub fn run() {
         bg_updater.start_poll(Arc::clone(&bg_index), &bg_config);
     });
 
+    // 提前克隆快捷键字符串，避免 setup 闭包借用 app_config
+    let hotkey_str = app_config.general.hotkey.clone();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_shell::init())
         .manage(state)
-        .setup(|app| {
+        .setup(move |app| {
             // === 系统托盘 ===
             let show_i = MenuItem::with_id(app, "show", "显示/隐藏", true, None::<&str>)?;
             let quit_i = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
@@ -143,11 +187,13 @@ pub fn run() {
                 })
                 .build(app)?;
 
-            // === 全局快捷键 Ctrl+Shift+C ===
-            let hotkey = Shortcut::new(
-                Some(Modifiers::CONTROL | Modifiers::SHIFT),
-                Code::KeyC,
-            );
+            // === 全局快捷键（从配置读取，默认 Ctrl+Shift+R / Cmd+Shift+R）===
+            let hotkey = parse_hotkey(&hotkey_str).unwrap_or_else(|| {
+                Shortcut::new(
+                    Some(Modifiers::CONTROL | Modifiers::SHIFT),
+                    Code::KeyR,
+                )
+            });
 
             app.handle().plugin(
                 tauri_plugin_global_shortcut::Builder::new()
@@ -237,6 +283,7 @@ pub fn run() {
             commands::gemini_ext_toggle,
             commands::gemini_ext_uninstall,
             commands::update_hotkey,
+            commands::detect_default_workspace,
         ])
         .run(tauri::generate_context!())
         .expect("启动 retalk 失败");

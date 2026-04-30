@@ -83,7 +83,12 @@ impl Default for AppConfig {
     fn default() -> Self {
         Self {
             general: GeneralConfig {
-                hotkey: "Ctrl+Shift+C".to_string(),
+                // macOS 使用 Cmd，其他平台使用 Ctrl；R for retalk，避免与终端复制冲突
+                hotkey: if cfg!(target_os = "macos") {
+                    "Cmd+Shift+R".to_string()
+                } else {
+                    "Ctrl+Shift+R".to_string()
+                },
             },
             terminal: TerminalConfig {
                 preferred: "auto".to_string(),
