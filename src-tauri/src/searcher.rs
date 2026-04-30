@@ -36,25 +36,38 @@ pub fn search(
     let last_prompt = schema.get_field("last_prompt").unwrap();
     let content = schema.get_field("content").unwrap();
 
-    // 搜索字段（包括 project_path 用于路径搜索）
+    // 搜索字段
     let search_fields = vec![project_name, first_prompt, last_prompt, content];
+    let project_path = schema.get_field("project_path").unwrap();
 
     let mut query_parser = QueryParser::for_index(index.index(), search_fields);
     // 设置默认连接为 OR（任一字段匹配即可）
     query_parser.set_conjunction_by_default();
 
     // 尝试解析查询，失败则转义特殊字符后重试，再失败则按词组逐个搜
-    let text_query = query_parser
+    let parsed_query = query_parser
         .parse_query(query_str)
         .or_else(|_| {
-            // 转义 Tantivy 特殊字符后重试
             let escaped = escape_query(query_str);
             query_parser.parse_query(&escaped)
         })
         .unwrap_or_else(|_| {
-            // 最终兜底：将每个词作为 TermQuery 用 OR 组合
             build_fallback_query(query_str, &[project_name, first_prompt, last_prompt, content])
         });
+
+    // 额外：对 project_path（STRING 字段）做子串匹配
+    // project_path 不分词，用 RegexQuery 匹配包含查询词的路径
+    let path_query = build_path_query(query_str, project_path);
+
+    // 合并：文本查询 OR 路径查询
+    let text_query: Box<dyn tantivy::query::Query> = if let Some(pq) = path_query {
+        Box::new(tantivy::query::BooleanQuery::new(vec![
+            (tantivy::query::Occur::Should, parsed_query),
+            (tantivy::query::Occur::Should, pq),
+        ]))
+    } else {
+        parsed_query
+    };
 
     // 组合 provider 过滤
     let final_query: Box<dyn tantivy::query::Query> = match provider_filter {
@@ -79,6 +92,35 @@ pub fn search(
     };
 
     extract_results(&searcher, schema, &top_docs)
+}
+
+/// 构建项目路径子串匹配查询（project_path 是 STRING 类型，需要 RegexQuery）
+fn build_path_query(
+    query_str: &str,
+    project_path_field: tantivy::schema::Field,
+) -> Option<Box<dyn tantivy::query::Query>> {
+    let trimmed = query_str.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    // 将查询词转为小写正则，匹配路径中包含该词的
+    // 转义正则特殊字符
+    let escaped: String = trimmed
+        .chars()
+        .map(|c| {
+            if "\\.*+?()[]{}|^$".contains(c) {
+                format!("\\{}", c)
+            } else {
+                c.to_string()
+            }
+        })
+        .collect();
+    let pattern = format!("(?i).*{}.*", escaped);
+    // tantivy RegexQuery
+    match tantivy::query::RegexQuery::from_pattern(&pattern, project_path_field) {
+        Ok(rq) => Some(Box::new(rq)),
+        Err(_) => None,
+    }
 }
 
 /// 转义 Tantivy 查询语法中的特殊字符
