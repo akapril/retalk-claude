@@ -290,9 +290,18 @@ function initPlatformTerminalOptions() {
     )
     .join("");
 
-  // 选择变化时更新自定义输入框可见性
+  // 重新绑定 custom-select 的核心交互（选中+关闭+显示文本）
+  const sel = document.getElementById("cfg-terminal");
+  const display = sel.querySelector(".custom-select-display");
   menu.querySelectorAll(".custom-select-item").forEach(item => {
-    item.addEventListener("click", () => {
+    item.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const val = item.dataset.value;
+      sel.dataset.value = val;
+      display.textContent = item.textContent;
+      menu.querySelectorAll(".custom-select-item").forEach(i => i.classList.remove("active"));
+      item.classList.add("active");
+      sel.classList.remove("open");
       setTimeout(updateCustomTerminalVisibility, 0);
     });
   });
