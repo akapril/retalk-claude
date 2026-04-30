@@ -105,11 +105,17 @@ pub fn scan_single_codex_session(path: &Path) -> Option<Session> {
             }
             Some("event_msg") => {
                 if let Some(payload) = &entry.payload {
-                    // 提取 token 统计
+                    // 提取 token 统计：payload.info.total_token_usage.{input_tokens, output_tokens}
                     if payload.get("type").and_then(|v| v.as_str()) == Some("token_count") {
-                        let input = payload.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
-                        let output = payload.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
-                        total_tokens += input + output;
+                        if let Some(usage) = payload
+                            .get("info")
+                            .and_then(|i| i.get("total_token_usage"))
+                        {
+                            let input = usage.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+                            let output = usage.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+                            // total_token_usage 是累计值，取最后一条的就是总数
+                            total_tokens = input + output;
+                        }
                     }
                     // 提取用户消息
                     if payload.get("type").and_then(|v| v.as_str()) == Some("user_message") {
