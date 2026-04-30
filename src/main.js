@@ -504,6 +504,18 @@ async function openSettings() {
     setCustomSelectValue("cfg-terminal", config.terminal.preferred);
     document.getElementById("cfg-custom-terminal").value = localStorage.getItem("retalk_customTerminal") || "";
     updateCustomTerminalVisibility();
+
+    // 浏览按钮
+    document.getElementById("browse-terminal-btn").onclick = async () => {
+      try {
+        const path = await invoke("pick_file", { title: LANG === "zh" ? "选择终端程序" : "Select Terminal Program" });
+        if (path) {
+          const input = document.getElementById("cfg-custom-terminal");
+          input.value = path + " -e {cmd}";
+          input.focus();
+        }
+      } catch (_) {}
+    };
     document.getElementById("cfg-watcher").checked = config.update.watcher_enabled;
     document.getElementById("cfg-poll").checked = config.update.poll_enabled;
     document.getElementById("cfg-poll-interval").value = config.update.poll_interval_secs;

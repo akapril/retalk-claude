@@ -284,6 +284,7 @@ pub fn run() {
             commands::gemini_ext_uninstall,
             commands::update_hotkey,
             commands::detect_default_workspace,
+            commands::pick_file,
         ])
         .run(tauri::generate_context!())
         .expect("启动 retalk 失败");

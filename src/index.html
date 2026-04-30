@@ -102,7 +102,10 @@
         </div>
         <div class="settings-row" id="custom-terminal-row" style="display:none">
           <label>自定义命令</label>
-          <input type="text" id="cfg-custom-terminal" class="settings-input" style="width:220px" placeholder="如: /usr/bin/my-term -e {cmd}" />
+          <div class="settings-input-group">
+            <input type="text" id="cfg-custom-terminal" class="settings-input" style="flex:1" placeholder="如: /usr/bin/my-term -e {cmd}" />
+            <button id="browse-terminal-btn" class="settings-btn" type="button">浏览</button>
+          </div>
         </div>
         <div class="settings-hint" id="custom-terminal-hint" style="display:none">
           使用 {cmd} 表示要执行的命令，{dir} 表示项目目录

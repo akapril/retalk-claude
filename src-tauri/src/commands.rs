@@ -80,6 +80,61 @@ pub fn detect_default_workspace() -> Option<String> {
         .map(|p| p.to_string_lossy().to_string())
 }
 
+/// 打开文件选择对话框，返回选中的文件路径
+#[tauri::command]
+pub fn pick_file(title: String) -> Option<String> {
+    use std::process::Command as StdCommand;
+
+    #[cfg(windows)]
+    {
+        // Windows: 使用 PowerShell 的 OpenFileDialog
+        let script = r#"
+            Add-Type -AssemblyName System.Windows.Forms
+            $f = New-Object System.Windows.Forms.OpenFileDialog
+            $f.Title = 'TITLE'
+            $f.Filter = '可执行文件|*.exe;*.cmd;*.bat;*.com|所有文件|*.*'
+            if ($f.ShowDialog() -eq 'OK') { $f.FileName }
+        "#.replace("TITLE", &title);
+        let output = StdCommand::new("powershell")
+            .args(["-NoProfile", "-Command", &script])
+            .output()
+            .ok()?;
+        let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if path.is_empty() { None } else { Some(path) }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        // macOS: 使用 osascript
+        let script = format!(
+            "POSIX path of (choose file with prompt \"{}\" of type {{\"public.unix-executable\", \"public.item\"}})",
+            title
+        );
+        let output = StdCommand::new("osascript")
+            .args(["-e", &script])
+            .output()
+            .ok()?;
+        let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if path.is_empty() { None } else { Some(path) }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        // Linux: 尝试 zenity，然后 kdialog
+        let output = StdCommand::new("zenity")
+            .args(["--file-selection", "--title", &title])
+            .output()
+            .or_else(|_| {
+                StdCommand::new("kdialog")
+                    .args(["--getopenfilename", ".", "*"])
+                    .output()
+            })
+            .ok()?;
+        let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if path.is_empty() { None } else { Some(path) }
+    }
+}
+
 /// 检查后台数据是否就绪
 #[tauri::command]
 pub fn is_ready(state: State<AppState>) -> bool {
