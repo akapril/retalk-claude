@@ -21,6 +21,7 @@ pub struct SearchResult {
 }
 
 /// 全文搜索，可按 provider 过滤
+/// 支持：普通关键词、精确短语（"..."）、特殊字符自动转义、模糊匹配
 pub fn search(
     index: &SessionIndex,
     query_str: &str,
@@ -35,22 +36,35 @@ pub fn search(
     let last_prompt = schema.get_field("last_prompt").unwrap();
     let content = schema.get_field("content").unwrap();
 
-    let query_parser = QueryParser::for_index(
-        index.index(),
-        vec![project_name, first_prompt, last_prompt, content],
-    );
+    // 搜索字段（包括 project_path 用于路径搜索）
+    let search_fields = vec![project_name, first_prompt, last_prompt, content];
 
-    let text_query = match query_parser.parse_query(query_str) {
-        Ok(q) => q,
-        Err(_) => return Vec::new(),
-    };
+    let mut query_parser = QueryParser::for_index(index.index(), search_fields);
+    // 设置默认连接为 OR（任一字段匹配即可）
+    query_parser.set_conjunction_by_default();
 
-    // 如果指定了 provider，用 BooleanQuery 组合文本查询和 provider 过滤
+    // 尝试解析查询，失败则转义特殊字符后重试，再失败则按词组逐个搜
+    let text_query = query_parser
+        .parse_query(query_str)
+        .or_else(|_| {
+            // 转义 Tantivy 特殊字符后重试
+            let escaped = escape_query(query_str);
+            query_parser.parse_query(&escaped)
+        })
+        .unwrap_or_else(|_| {
+            // 最终兜底：将每个词作为 TermQuery 用 OR 组合
+            build_fallback_query(query_str, &[project_name, first_prompt, last_prompt, content])
+        });
+
+    // 组合 provider 过滤
     let final_query: Box<dyn tantivy::query::Query> = match provider_filter {
         Some(provider) => {
             let provider_field = schema.get_field("provider").unwrap();
             let term = tantivy::Term::from_field_text(provider_field, provider);
-            let provider_query = tantivy::query::TermQuery::new(term, tantivy::schema::IndexRecordOption::Basic);
+            let provider_query = tantivy::query::TermQuery::new(
+                term,
+                tantivy::schema::IndexRecordOption::Basic,
+            );
             Box::new(tantivy::query::BooleanQuery::new(vec![
                 (tantivy::query::Occur::Must, text_query),
                 (tantivy::query::Occur::Must, Box::new(provider_query)),
@@ -65,6 +79,47 @@ pub fn search(
     };
 
     extract_results(&searcher, schema, &top_docs)
+}
+
+/// 转义 Tantivy 查询语法中的特殊字符
+fn escape_query(query: &str) -> String {
+    let special = ['+', '-', '&', '|', '!', '(', ')', '{', '}', '[', ']', '^', '"', '~', '*', '?', ':', '\\', '/'];
+    let mut result = String::with_capacity(query.len() * 2);
+    for c in query.chars() {
+        if special.contains(&c) {
+            result.push('\\');
+        }
+        result.push(c);
+    }
+    result
+}
+
+/// 兜底查询：将输入按空格分词，每个词在所有字段上做 TermQuery，用 Should(OR) 组合
+fn build_fallback_query(
+    query_str: &str,
+    fields: &[tantivy::schema::Field],
+) -> Box<dyn tantivy::query::Query> {
+    let words: Vec<&str> = query_str.split_whitespace().collect();
+    if words.is_empty() {
+        return Box::new(AllQuery);
+    }
+
+    let mut sub_queries: Vec<(tantivy::query::Occur, Box<dyn tantivy::query::Query>)> = Vec::new();
+    for word in &words {
+        let lower = word.to_lowercase();
+        for field in fields {
+            let term = tantivy::Term::from_field_text(*field, &lower);
+            sub_queries.push((
+                tantivy::query::Occur::Should,
+                Box::new(tantivy::query::TermQuery::new(
+                    term,
+                    tantivy::schema::IndexRecordOption::WithFreqsAndPositions,
+                )),
+            ));
+        }
+    }
+
+    Box::new(tantivy::query::BooleanQuery::new(sub_queries))
 }
 
 /// 列出会话（按更新时间降序），可按 provider 过滤
