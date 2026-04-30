@@ -23,11 +23,17 @@ pub enum TerminalKind {
     PowerShell,
     Cmd,
     // macOS
-    MacDefault,
-    MacIterm,
+    MacDefault,      // Terminal.app
+    MacIterm,        // iTerm2
+    MacGhostty,      // Ghostty
+    MacAlacritty,    // Alacritty
+    MacKitty,        // Kitty
+    MacWezterm,      // WezTerm
+    MacRio,          // Rio
+    MacWarp,         // Warp
     // Linux
-    LinuxTerminal(String), // gnome-terminal, konsole, alacritty, kitty 等
-    LinuxFallback,         // xterm
+    LinuxTerminal(String),
+    LinuxFallback,
 }
 
 /// 根据用户偏好检测终端类型，"auto" 时自动探测系统可用终端
@@ -39,7 +45,13 @@ pub fn detect_terminal(preferred: &str) -> TerminalKind {
         "cmd" => TerminalKind::Cmd,
         // macOS
         "terminal" | "Terminal" => TerminalKind::MacDefault,
-        "iterm" | "iTerm" => TerminalKind::MacIterm,
+        "iterm" | "iTerm" | "iTerm2" => TerminalKind::MacIterm,
+        "ghostty" | "Ghostty" => TerminalKind::MacGhostty,
+        "alacritty" => TerminalKind::MacAlacritty,
+        "kitty" => TerminalKind::MacKitty,
+        "wezterm" | "WezTerm" => TerminalKind::MacWezterm,
+        "rio" | "Rio" => TerminalKind::MacRio,
+        "warp" | "Warp" => TerminalKind::MacWarp,
         // Linux — 用户可直接指定终端名称
         #[cfg(target_os = "linux")]
         name if !name.is_empty() && name != "auto" => TerminalKind::LinuxTerminal(name.to_string()),
@@ -69,12 +81,22 @@ fn auto_detect() -> TerminalKind {
     TerminalKind::Cmd
 }
 
-/// macOS: 默认使用 Terminal.app，可检测 iTerm2
+/// macOS: 按优先级检测已安装的终端
 #[cfg(target_os = "macos")]
 fn auto_detect() -> TerminalKind {
-    // 检测 iTerm2 是否安装
-    if std::path::Path::new("/Applications/iTerm.app").exists() {
-        return TerminalKind::MacIterm;
+    let checks: Vec<(&str, TerminalKind)> = vec![
+        ("/Applications/Ghostty.app", TerminalKind::MacGhostty),
+        ("/Applications/iTerm.app", TerminalKind::MacIterm),
+        ("/Applications/Warp.app", TerminalKind::MacWarp),
+        ("/Applications/kitty.app", TerminalKind::MacKitty),
+        ("/Applications/Alacritty.app", TerminalKind::MacAlacritty),
+        ("/Applications/WezTerm.app", TerminalKind::MacWezterm),
+        ("/Applications/Rio.app", TerminalKind::MacRio),
+    ];
+    for (path, kind) in checks {
+        if std::path::Path::new(path).exists() {
+            return kind;
+        }
     }
     TerminalKind::MacDefault
 }
@@ -211,7 +233,6 @@ pub fn resume_in_terminal(
                 .spawn()
         }
         TerminalKind::MacIterm => {
-            // 使用 osascript 在 iTerm2 中打开新标签页并执行命令
             let script = format!(
                 "tell application \"iTerm\"\n\
                     activate\n\
@@ -221,6 +242,53 @@ pub fn resume_in_terminal(
                             write text \"{}\"\n\
                         end tell\n\
                     end tell\n\
+                end tell",
+                unix_cmd.replace("\"", "\\\"")
+            );
+            Command::new("osascript")
+                .args(["-e", &script])
+                .spawn()
+        }
+        TerminalKind::MacGhostty => {
+            let shell_cmd = format!("{}; exec $SHELL", unix_cmd);
+            Command::new("open")
+                .args(["-na", "Ghostty", "--args", "-e", "/bin/zsh", "-c", &shell_cmd])
+                .spawn()
+        }
+        TerminalKind::MacAlacritty => {
+            let shell_cmd = format!("{}; exec zsh", unix_cmd);
+            Command::new("alacritty")
+                .args(["-e", "/bin/zsh", "-c", &shell_cmd])
+                .spawn()
+        }
+        TerminalKind::MacKitty => {
+            let shell_cmd = format!("{}; exec zsh", unix_cmd);
+            Command::new("kitty")
+                .args(["--hold", "zsh", "-c", &shell_cmd])
+                .spawn()
+        }
+        TerminalKind::MacWezterm => {
+            let shell_cmd = format!("{}; exec zsh", unix_cmd);
+            Command::new("wezterm")
+                .args(["start", "--cwd", project_path, "--", "zsh", "-c", &shell_cmd])
+                .spawn()
+        }
+        TerminalKind::MacRio => {
+            let shell_cmd = format!("{}; exec zsh", unix_cmd);
+            Command::new("rio")
+                .args(["-w", project_path, "-e", "zsh", "-c", &shell_cmd])
+                .spawn()
+        }
+        TerminalKind::MacWarp => {
+            // Warp 通过 URI scheme 打开，然后 osascript 输入命令
+            let _ = Command::new("open")
+                .args([&format!("warp://action/new_window?path={}", project_path)])
+                .spawn();
+            std::thread::sleep(std::time::Duration::from_millis(800));
+            let script = format!(
+                "tell application \"System Events\" to tell process \"Warp\"\n\
+                    keystroke \"{}\"\n\
+                    key code 36\n\
                 end tell",
                 unix_cmd.replace("\"", "\\\"")
             );

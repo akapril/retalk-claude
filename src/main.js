@@ -260,8 +260,14 @@ function initPlatformTerminalOptions() {
 
   let options = [{ value: "auto", label: t.autoDetect || "自动检测" }];
   if (isMac) {
-    options.push({ value: "terminal", label: "Terminal" });
+    options.push({ value: "terminal", label: "Terminal.app" });
     options.push({ value: "iterm", label: "iTerm2" });
+    options.push({ value: "ghostty", label: "Ghostty" });
+    options.push({ value: "warp", label: "Warp" });
+    options.push({ value: "kitty", label: "Kitty" });
+    options.push({ value: "alacritty", label: "Alacritty" });
+    options.push({ value: "wezterm", label: "WezTerm" });
+    options.push({ value: "rio", label: "Rio" });
   } else if (isLinux) {
     options.push({ value: "gnome-terminal", label: "GNOME Terminal" });
     options.push({ value: "konsole", label: "Konsole" });
