@@ -1269,6 +1269,31 @@ select.eco-add-input { cursor: pointer; }
   border-top: 1px solid var(--border);
 }
 
+/* ======================== 时间线（对话回放）面板 ======================== */
+.timeline-panel { flex: 1; overflow-y: auto; padding: 0; display: flex; flex-direction: column; }
+.tl-header { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.tl-session-info { font-size: 13px; color: var(--text); }
+.tl-session-meta { font-size: 11px; color: var(--text-dim); margin-left: auto; }
+.tl-messages { flex: 1; overflow-y: auto; padding: 8px 16px; }
+.tl-msg { margin-bottom: 8px; border-radius: 8px; padding: 8px 12px; border: 1px solid var(--border); }
+.tl-msg-user { background: rgba(74, 144, 217, 0.08); border-color: rgba(74, 144, 217, 0.2); }
+.tl-msg-assistant { background: var(--bg-item); }
+.tl-msg-tool { background: rgba(34, 197, 94, 0.06); border-color: rgba(34, 197, 94, 0.15); }
+.tl-msg-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-size: 11px; }
+.tl-msg-role { font-weight: 700; color: var(--text-highlight); }
+.tl-msg-tool .tl-msg-role { color: #22c55e; }
+.tl-msg-tokens { color: var(--text-dim); opacity: 0.7; }
+.tl-msg-time { color: var(--text-dim); margin-left: auto; font-size: 10px; }
+.tl-msg-content { font-size: 12px; color: var(--text); white-space: pre-wrap; word-break: break-word; line-height: 1.5; max-height: 300px; overflow-y: auto; }
+
+/* ======================== 命令面板 ======================== */
+.cmd-item { display: flex; align-items: center; gap: 10px; padding: 8px 16px; cursor: pointer; border-bottom: 1px solid rgba(255, 255, 255, 0.03); }
+.cmd-item:hover { background: var(--bg-item-hover); }
+.cmd-item.selected { background: var(--bg-item-selected); }
+.cmd-icon { font-size: 16px; flex-shrink: 0; width: 24px; text-align: center; }
+.cmd-label { font-size: 13px; color: var(--text); flex: 1; }
+.cmd-id { font-size: 10px; color: var(--text-dim); opacity: 0.5; }
+
 /* ======================== Light theme overrides ======================== */
 :root[data-theme="light"] .icon-dropdown-menu,
 :root[data-theme="light"] .custom-select-menu,

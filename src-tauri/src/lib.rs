@@ -287,6 +287,8 @@ pub fn run() {
             commands::detect_default_workspace,
             commands::pick_file,
             commands::get_session_timeline,
+            commands::generate_cost_report,
+            commands::write_text_file,
         ])
         .run(tauri::generate_context!())
         .expect("启动 retalk 失败");

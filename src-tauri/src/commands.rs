@@ -1237,6 +1237,50 @@ fn set_autostart_impl(enabled: bool) -> Result<(), String> {
 }
 
 // ============================================================
+// 成本报告 — 按会话统计 Token 消耗与费用估算
+// ============================================================
+
+#[derive(serde::Serialize)]
+pub struct CostReportRow {
+    pub provider: String,
+    pub project_name: String,
+    pub session_id: String,
+    pub date: String,
+    pub total_tokens: u64,
+    pub estimated_cost_usd: f64,
+}
+
+#[tauri::command]
+pub fn generate_cost_report(state: State<AppState>) -> Vec<CostReportRow> {
+    let sessions = state.sessions.lock();
+    sessions.iter()
+        .filter(|s| s.total_tokens > 0)
+        .map(|s| {
+            let half = s.total_tokens / 2;
+            let cost = match s.provider.as_str() {
+                "claude" => (half as f64 * 3.0 + half as f64 * 15.0) / 1_000_000.0,
+                "codex" => (half as f64 * 2.0 + half as f64 * 8.0) / 1_000_000.0,
+                _ => 0.0,
+            };
+            CostReportRow {
+                provider: s.provider.clone(),
+                project_name: s.project_name.clone(),
+                session_id: s.session_id.clone(),
+                date: s.updated_at.format("%Y-%m-%d").to_string(),
+                total_tokens: s.total_tokens,
+                estimated_cost_usd: (cost * 100.0).round() / 100.0,
+            }
+        })
+        .collect()
+}
+
+/// 写入文本文件（用于 CSV 导出等）
+#[tauri::command]
+pub fn write_text_file(path: String, content: String) -> Result<(), String> {
+    std::fs::write(&path, content).map_err(|e| format!("写入失败: {}", e))
+}
+
+// ============================================================
 // 会话时间线 — 返回完整对话历史（用户/助手/工具消息）
 // ============================================================
 

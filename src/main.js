@@ -31,6 +31,7 @@ const i18n = {
     theme: "主题", themeDark: "深色", themeLight: "浅色",
     scanned: "已扫描完成，暂无会话记录", noMatchResults: "没有找到匹配的会话",
     copiedPath: "已复制项目路径", copiedCmd: "已复制恢复命令", copiedMd: "已复制 Markdown 到剪贴板",
+    viewTimeline: "查看对话", commandEmpty: "没有匹配的命令",
   },
   en: {
     searchPlaceholder: "Search sessions...",
@@ -59,6 +60,7 @@ const i18n = {
     theme: "Theme", themeDark: "Dark", themeLight: "Light",
     scanned: "Scan complete, no sessions found", noMatchResults: "No matching sessions found",
     copiedPath: "Project path copied", copiedCmd: "Resume command copied", copiedMd: "Markdown copied to clipboard",
+    viewTimeline: "View Timeline", commandEmpty: "No matching commands",
   }
 };
 const t = i18n[LANG];
@@ -99,6 +101,7 @@ let pluginTool = "claude"; // 插件子标签: "claude" | "codex" | "gemini"
 let pluginView = "installed"; // 插件视图: "installed" | "available"
 let skillToolFilter = "claude"; // skills 工具筛选
 let mcpToolFilter = "claude"; // mcp 工具筛选
+let timelineOpen = false;    // 时间线（对话回放）面板状态
 let multiSelectMode = false; // Feature 6(批量操作): 多选模式
 let multiSelected = new Set(); // Feature 6: 已选会话 ID 集合
 let providerStatus = [];   // Feature 1(空状态引导): provider 可用状态
@@ -348,12 +351,15 @@ async function openNewSession() {
   statsOpen = false;
   ecoOpen = false;
   compareOpen = false;
+  timelineOpen = false;
   sessionList.style.display = "none";
   previewPanel.style.display = "none";
   settingsPanel.style.display = "none";
   statsPanel.style.display = "none";
   const ecoPanel = document.getElementById("eco-panel");
   if (ecoPanel) ecoPanel.style.display = "none";
+  const tlPanel0 = document.getElementById("timeline-panel");
+  if (tlPanel0) tlPanel0.style.display = "none";
 
   let panel = document.getElementById("new-session-panel");
   if (!panel) {
@@ -476,6 +482,7 @@ async function openSettings() {
   statsOpen = false;
   compareOpen = false;
   newSessionOpen = false;
+  timelineOpen = false;
   sessionList.style.display = "none";
   previewPanel.style.display = "none";
   settingsPanel.style.display = "";
@@ -484,6 +491,8 @@ async function openSettings() {
   if (ecoPanel) ecoPanel.style.display = "none";
   const nsPanel = document.getElementById("new-session-panel");
   if (nsPanel) nsPanel.style.display = "none";
+  const tlPanel = document.getElementById("timeline-panel");
+  if (tlPanel) tlPanel.style.display = "none";
   updateStatusBar();
 
   // 先显示面板，localStorage 值立即填入（不阻塞）
@@ -600,6 +609,7 @@ function openStats() {
   compareOpen = false;
   ecoOpen = false;
   newSessionOpen = false;
+  timelineOpen = false;
   sessionList.style.display = "none";
   previewPanel.style.display = "none";
   settingsPanel.style.display = "none";
@@ -608,6 +618,8 @@ function openStats() {
   if (ecoPanel) ecoPanel.style.display = "none";
   const nsPanel = document.getElementById("new-session-panel");
   if (nsPanel) nsPanel.style.display = "none";
+  const tlPanel1 = document.getElementById("timeline-panel");
+  if (tlPanel1) tlPanel1.style.display = "none";
   renderStats();
   updateStatusBar();
 }
@@ -631,12 +643,15 @@ async function openEco() {
   statsOpen = false;
   compareOpen = false;
   newSessionOpen = false;
+  timelineOpen = false;
   sessionList.style.display = "none";
   previewPanel.style.display = "none";
   settingsPanel.style.display = "none";
   statsPanel.style.display = "none";
   const nsPanel = document.getElementById("new-session-panel");
   if (nsPanel) nsPanel.style.display = "none";
+  const tlPanel2 = document.getElementById("timeline-panel");
+  if (tlPanel2) tlPanel2.style.display = "none";
 
   // 动态创建或复用面板
   let ecoPanel = document.getElementById("eco-panel");
@@ -1336,7 +1351,53 @@ function renderStats() {
     html += `</div>`;
   }
 
+  // 成本报告区域
+  html += `
+    <div class="stats-section">
+      <div class="stats-section-title">成本报告</div>
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <button class="settings-btn-primary" id="cost-export-csv" style="font-size:11px;padding:4px 12px;">导出 CSV</button>
+        <button class="settings-btn" id="cost-copy-csv" style="font-size:11px;padding:4px 12px;">复制到剪贴板</button>
+      </div>
+    </div>
+  `;
+
   statsPanel.innerHTML = html;
+
+  // 成本报告按钮事件
+  document.getElementById("cost-export-csv").addEventListener("click", async () => {
+    try {
+      const rows = await invoke("generate_cost_report");
+      const csv = generateCSV(rows);
+      const desktop = await invoke("get_desktop_path");
+      const sep = navigator.platform.startsWith("Win") ? "\\" : "/";
+      const filePath = `${desktop}${sep}retalk_cost_report.csv`;
+      await invoke("write_text_file", { path: filePath, content: csv });
+      showToast(t.savedToDesktop + ": retalk_cost_report.csv");
+      try { await invoke("open_in_explorer_select", { filePath }); } catch (_) {}
+    } catch (e) {
+      showToast("导出失败: " + e);
+    }
+  });
+
+  document.getElementById("cost-copy-csv").addEventListener("click", async () => {
+    try {
+      const rows = await invoke("generate_cost_report");
+      const csv = generateCSV(rows);
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(csv);
+        showToast(t.copiedToClipboard);
+      }
+    } catch (e) {
+      showToast("复制失败: " + e);
+    }
+  });
+}
+
+function generateCSV(rows) {
+  const header = "Provider,Project,Session ID,Date,Total Tokens,Est. Cost (USD)";
+  const lines = rows.map(r => `${r.provider},${r.project_name},${r.session_id},${r.date},${r.total_tokens},${r.estimated_cost_usd}`);
+  return [header, ...lines].join("\n");
 }
 
 // === 会话加载 ===
@@ -1708,7 +1769,7 @@ function updatePreview() {
       previewMessages.innerHTML = msgs
         .map((m) => `<div class="preview-msg">${highlightMatch(truncate(m, 120), currentQuery)}</div>`)
         .join("");
-      if (!settingsOpen && !statsOpen && !ecoOpen) {
+      if (!settingsOpen && !statsOpen && !ecoOpen && !timelineOpen) {
         previewPanel.style.display = "";
       }
     } catch (_) {
@@ -1802,6 +1863,9 @@ contextMenu.querySelectorAll(".ctx-item").forEach((item) => {
         break;
       case "resume":
         await resumeSession(s);
+        break;
+      case "timeline":
+        await openTimeline(s);
         break;
       case "vscode":
         try {
@@ -1920,12 +1984,181 @@ function startTagEdit(sessionId, itemEl) {
   });
 }
 
+// ======================== 时间线（对话回放）面板 ========================
+
+async function openTimeline(session) {
+  timelineOpen = true;
+  settingsOpen = false;
+  statsOpen = false;
+  ecoOpen = false;
+  compareOpen = false;
+  newSessionOpen = false;
+  sessionList.style.display = "none";
+  previewPanel.style.display = "none";
+  settingsPanel.style.display = "none";
+  statsPanel.style.display = "none";
+  const ecoPanel = document.getElementById("eco-panel");
+  if (ecoPanel) ecoPanel.style.display = "none";
+  const nsPanel = document.getElementById("new-session-panel");
+  if (nsPanel) nsPanel.style.display = "none";
+
+  let panel = document.getElementById("timeline-panel");
+  if (!panel) {
+    panel = document.createElement("div");
+    panel.id = "timeline-panel";
+    panel.className = "timeline-panel";
+    document.getElementById("app").insertBefore(panel, statusBar);
+  }
+  panel.style.display = "";
+  panel.innerHTML = '<div class="empty-state">加载中...</div>';
+  updateStatusBar();
+
+  try {
+    const messages = await invoke("get_session_timeline", {
+      provider: session.provider,
+      sessionId: session.session_id,
+    });
+    renderTimelinePanel(panel, session, messages);
+  } catch (e) {
+    panel.innerHTML = `<div class="empty-state">加载失败: ${escapeHtml(String(e))}</div>`;
+  }
+}
+
+function closeTimeline() {
+  timelineOpen = false;
+  const panel = document.getElementById("timeline-panel");
+  if (panel) panel.style.display = "none";
+  sessionList.style.display = "";
+  searchInput.focus();
+  updateStatusBar();
+}
+
+function renderTimelinePanel(panel, session, messages) {
+  const providerBadge = `<span class="provider-badge provider-${session.provider}">${session.provider}</span>`;
+  let headerHtml = `
+    <div class="tl-header">
+      <button class="compare-back-btn" id="tl-back">${t.back}</button>
+      <span class="tl-session-info">${providerBadge} <strong>${escapeHtml(session.project_name)}</strong></span>
+      <span class="tl-session-meta">${messages.length} 条消息</span>
+    </div>
+  `;
+
+  let msgsHtml = '<div class="tl-messages">';
+  if (messages.length === 0) {
+    msgsHtml += `<div class="empty-state">没有对话记录</div>`;
+  } else {
+    messages.forEach((msg) => {
+      const roleClass = msg.role === "user" ? "tl-msg-user" : msg.role === "assistant" ? "tl-msg-assistant" : "tl-msg-tool";
+      const roleLabel = msg.role === "user" ? "User" : msg.role === "assistant" ? "Assistant" : (msg.tool_name || "Tool");
+      const timeStr = msg.timestamp || "";
+      const tokenStr = msg.token_count > 0 ? `<span class="tl-msg-tokens">${formatTokens(msg.token_count)}</span>` : "";
+      // 截断过长的消息内容
+      const content = msg.content || "";
+      const displayContent = content.length > 2000 ? content.slice(0, 2000) + "..." : content;
+      msgsHtml += `
+        <div class="tl-msg ${roleClass}">
+          <div class="tl-msg-header">
+            <span class="tl-msg-role">${escapeHtml(roleLabel)}</span>
+            ${tokenStr}
+            <span class="tl-msg-time">${escapeHtml(timeStr)}</span>
+          </div>
+          <div class="tl-msg-content">${escapeHtml(displayContent)}</div>
+        </div>`;
+    });
+  }
+  msgsHtml += '</div>';
+
+  panel.innerHTML = headerHtml + msgsHtml;
+
+  document.getElementById("tl-back").addEventListener("click", closeTimeline);
+}
+
 // ======================== 搜索与导航 ========================
+
+// ======================== 命令面板 ========================
+
+let commandMode = false; // 命令面板模式
+
+const COMMANDS = [
+  { id: "settings",      label: () => t.settings,           icon: "⚙",  action: () => openSettings() },
+  { id: "stats",         label: () => t.stats,              icon: "📊", action: () => openStats() },
+  { id: "eco",           label: () => t.ecosystem,          icon: "🔌", action: () => openEco() },
+  { id: "new-session",   label: () => t.newSession,         icon: "➕", action: () => openNewSession() },
+  { id: "rebuild-index", label: () => t.rebuildIndex,       icon: "🔄", action: async () => { showToast("正在后台重建索引..."); await invoke("rebuild_index"); await new Promise(r => setTimeout(r, 2000)); await loadSessions(); showToast("索引重建完成"); } },
+  { id: "auto-tag",      label: () => t.autoTag,            icon: "🏷", action: async () => { const count = await invoke("auto_tag_sessions"); allTags = await invoke("get_all_tags"); showToast(`自动标签完成，新增 ${count} 个会话标签`); render(); } },
+  { id: "theme-dark",    label: () => t.themeDark,          icon: "🌙", action: () => { document.documentElement.dataset.theme = "dark"; localStorage.setItem("retalk_theme", "dark"); } },
+  { id: "theme-light",   label: () => t.themeLight,         icon: "☀",  action: () => { document.documentElement.dataset.theme = "light"; localStorage.setItem("retalk_theme", "light"); } },
+  { id: "filter-all",    label: () => t.allTools,           icon: "🌐", action: () => { providerFilter = "all"; localStorage.setItem("retalk_providerFilter", "all"); loadSessions(); } },
+  { id: "filter-claude", label: () => "Claude",             icon: "🤖", action: () => { providerFilter = "claude"; localStorage.setItem("retalk_providerFilter", "claude"); loadSessions(); } },
+  { id: "filter-codex",  label: () => "Codex",              icon: "🤖", action: () => { providerFilter = "codex"; localStorage.setItem("retalk_providerFilter", "codex"); loadSessions(); } },
+  { id: "filter-gemini", label: () => "Gemini",             icon: "🤖", action: () => { providerFilter = "gemini"; localStorage.setItem("retalk_providerFilter", "gemini"); loadSessions(); } },
+  { id: "clear-search",  label: () => LANG === "zh" ? "清空搜索" : "Clear Search", icon: "✕", action: () => { searchInput.value = ""; currentQuery = ""; commandMode = false; searchClear.style.display = "none"; loadSessions(); } },
+];
+
+let cmdSelectedIndex = 0;
+
+function renderCommandPalette(query) {
+  const q = query.toLowerCase();
+  const filtered = COMMANDS.filter(c => {
+    const lbl = c.label().toLowerCase();
+    return lbl.includes(q) || c.id.includes(q);
+  });
+
+  cmdSelectedIndex = Math.min(cmdSelectedIndex, Math.max(0, filtered.length - 1));
+
+  if (filtered.length === 0) {
+    sessionList.innerHTML = `<div class="empty-state">${t.commandEmpty}</div>`;
+    return;
+  }
+
+  sessionList.innerHTML = filtered.map((c, i) => `
+    <div class="cmd-item ${i === cmdSelectedIndex ? 'selected' : ''}" data-cmd-index="${i}">
+      <span class="cmd-icon">${c.icon}</span>
+      <span class="cmd-label">${escapeHtml(c.label())}</span>
+      <span class="cmd-id">${c.id}</span>
+    </div>
+  `).join("");
+
+  // 点击执行命令
+  sessionList.querySelectorAll(".cmd-item").forEach((el, i) => {
+    el.addEventListener("click", () => {
+      executeCommand(filtered[i]);
+    });
+  });
+}
+
+function executeCommand(cmd) {
+  searchInput.value = "";
+  currentQuery = "";
+  commandMode = false;
+  searchClear.style.display = "none";
+  cmd.action();
+}
 
 let searchTimer = null;
 searchInput.addEventListener("input", () => {
-  currentQuery = searchInput.value;
-  searchClear.style.display = searchInput.value ? "" : "none";
+  const val = searchInput.value;
+  searchClear.style.display = val ? "" : "none";
+
+  if (val.startsWith(">")) {
+    // 命令面板模式
+    commandMode = true;
+    cmdSelectedIndex = 0;
+    // 关闭所有面板，显示会话列表用于命令渲染
+    if (settingsOpen) closeSettings();
+    if (statsOpen) closeStats();
+    if (ecoOpen) closeEco();
+    if (timelineOpen) closeTimeline();
+    if (compareOpen) closeCompareView();
+    if (newSessionOpen) closeNewSession();
+    previewPanel.style.display = "none";
+    const cmdQuery = val.slice(1).trim();
+    renderCommandPalette(cmdQuery);
+    return;
+  }
+
+  commandMode = false;
+  currentQuery = val;
   clearTimeout(searchTimer);
   searchTimer = setTimeout(loadSessions, 150);
 });
@@ -1945,7 +2178,14 @@ document.addEventListener("keydown", async (e) => {
   if (e.target.classList.contains("tag-input")) return;
   const inSearchBox = e.target === searchInput;
 
-  if (e.key === "ArrowDown" && !inSearchBox) {
+  if (commandMode && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+    e.preventDefault();
+    const q = searchInput.value.slice(1).trim().toLowerCase();
+    const filtered = COMMANDS.filter(c => c.label().toLowerCase().includes(q) || c.id.includes(q));
+    if (e.key === "ArrowDown" && cmdSelectedIndex < filtered.length - 1) cmdSelectedIndex++;
+    if (e.key === "ArrowUp" && cmdSelectedIndex > 0) cmdSelectedIndex--;
+    renderCommandPalette(q);
+  } else if (e.key === "ArrowDown" && !inSearchBox) {
     e.preventDefault();
     if (selectedIndex < sessions.length - 1) {
       selectedIndex++;
@@ -1963,9 +2203,18 @@ document.addEventListener("keydown", async (e) => {
     }
   } else if (e.key === "Enter") {
     e.preventDefault();
-    const list = applyFavoriteSort(filteredSessions());
-    if (list[selectedIndex]) {
-      await openSession(list[selectedIndex]);
+    if (commandMode) {
+      // 命令面板模式：执行选中的命令
+      const q = searchInput.value.slice(1).trim().toLowerCase();
+      const filtered = COMMANDS.filter(c => c.label().toLowerCase().includes(q) || c.id.includes(q));
+      if (filtered[cmdSelectedIndex]) {
+        executeCommand(filtered[cmdSelectedIndex]);
+      }
+    } else {
+      const list = applyFavoriteSort(filteredSessions());
+      if (list[selectedIndex]) {
+        await openSession(list[selectedIndex]);
+      }
     }
   } else if (e.key === "c" && e.ctrlKey) {
     e.preventDefault();
@@ -1976,6 +2225,8 @@ document.addEventListener("keydown", async (e) => {
   } else if (e.key === "Escape") {
     if (contextMenu.style.display !== "none") {
       hideContextMenu();
+    } else if (timelineOpen) {
+      closeTimeline();
     } else if (multiSelectMode) {
       exitMultiSelect();
     } else if (newSessionOpen) {
@@ -2124,6 +2375,10 @@ function updateStatusBar() {
   if (!statusBar) return;
   if (multiSelectMode) {
     statusBar.innerHTML = `<span>已选 ${multiSelected.size} 项</span><span>Esc 取消</span>`;
+    return;
+  }
+  if (timelineOpen) {
+    statusBar.innerHTML = `<span>${t.back}</span>`;
     return;
   }
   if (newSessionOpen) {
