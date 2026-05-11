@@ -7,6 +7,7 @@ mod providers;
 mod scanner;
 mod searcher;
 mod terminal;
+pub mod timeline;
 mod updater;
 
 use commands::AppState;
@@ -285,6 +286,7 @@ pub fn run() {
             commands::update_hotkey,
             commands::detect_default_workspace,
             commands::pick_file,
+            commands::get_session_timeline,
         ])
         .run(tauri::generate_context!())
         .expect("启动 retalk 失败");

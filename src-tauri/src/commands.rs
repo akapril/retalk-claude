@@ -1236,6 +1236,22 @@ fn set_autostart_impl(enabled: bool) -> Result<(), String> {
     Ok(())
 }
 
+// ============================================================
+// 会话时间线 — 返回完整对话历史（用户/助手/工具消息）
+// ============================================================
+
+#[tauri::command]
+pub async fn get_session_timeline(
+    provider: String,
+    session_id: String,
+) -> Vec<crate::timeline::TimelineMessage> {
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::timeline::read_timeline(&provider, &session_id)
+    })
+    .await
+    .unwrap_or_default()
+}
+
 /// 查询开机自启状态（跨平台，异步避免注册表查询阻塞 UI）
 #[tauri::command]
 pub async fn get_autostart() -> bool {
