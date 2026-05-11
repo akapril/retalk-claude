@@ -1,12 +1,12 @@
 mod commands;
-mod config;
+pub mod config;
 mod ecosystem;
-mod indexer;
-mod models;
-mod providers;
-mod scanner;
-mod searcher;
-mod terminal;
+pub mod indexer;
+pub mod models;
+pub mod providers;
+pub mod scanner;
+pub mod searcher;
+pub mod terminal;
 pub mod timeline;
 mod updater;
 

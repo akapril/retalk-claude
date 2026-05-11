@@ -23,10 +23,16 @@ chrono = { version = "0.4", features = ["serde"] }
 dirs = "6"
 parking_lot = "0.12"
 rusqlite = { version = "0.33", features = ["bundled"] }
+clap = { version = "4", features = ["derive"] }
+colored = "3"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 cocoa = "0.26"
 objc = "0.2"
+
+[[bin]]
+name = "retalk-cli"
+path = "src/bin/retalk_cli.rs"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
