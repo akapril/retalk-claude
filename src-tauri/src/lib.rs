@@ -111,6 +111,7 @@ pub fn run() {
         tags: Arc::new(Mutex::new(tags)),
         notes: Arc::new(Mutex::new(notes)),
         ready: Arc::clone(&ready),
+        refreshing: Arc::new(std::sync::atomic::AtomicBool::new(false)),
     };
 
     // 后台线程：增量同步 + 启动更新策略
@@ -225,12 +226,18 @@ pub fn run() {
                 }
             }
 
-            // === 窗口失焦自动隐藏 ===
+            // === 窗口失焦自动隐藏（延迟检查，避免打断文件对话框和右键菜单）===
             if let Some(window) = app.get_webview_window("main") {
-                let w = window.clone();
+                let w2 = window.clone();
                 window.on_window_event(move |event| {
                     if let tauri::WindowEvent::Focused(false) = event {
-                        let _ = w.hide();
+                        let w3 = w2.clone();
+                        std::thread::spawn(move || {
+                            std::thread::sleep(std::time::Duration::from_millis(200));
+                            if !w3.is_focused().unwrap_or(true) {
+                                let _ = w3.hide();
+                            }
+                        });
                     }
                 });
             }

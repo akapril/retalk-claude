@@ -360,6 +360,8 @@ async function openNewSession() {
   if (ecoPanel) ecoPanel.style.display = "none";
   const tlPanel0 = document.getElementById("timeline-panel");
   if (tlPanel0) tlPanel0.style.display = "none";
+  const compareEl0 = document.getElementById("compare-view");
+  if (compareEl0) compareEl0.style.display = "none";
 
   let panel = document.getElementById("new-session-panel");
   if (!panel) {
@@ -493,6 +495,8 @@ async function openSettings() {
   if (nsPanel) nsPanel.style.display = "none";
   const tlPanel = document.getElementById("timeline-panel");
   if (tlPanel) tlPanel.style.display = "none";
+  const compareEl1 = document.getElementById("compare-view");
+  if (compareEl1) compareEl1.style.display = "none";
   updateStatusBar();
 
   // 先显示面板，localStorage 值立即填入（不阻塞）
@@ -620,6 +624,8 @@ function openStats() {
   if (nsPanel) nsPanel.style.display = "none";
   const tlPanel1 = document.getElementById("timeline-panel");
   if (tlPanel1) tlPanel1.style.display = "none";
+  const compareEl2 = document.getElementById("compare-view");
+  if (compareEl2) compareEl2.style.display = "none";
   renderStats();
   updateStatusBar();
 }
@@ -652,6 +658,8 @@ async function openEco() {
   if (nsPanel) nsPanel.style.display = "none";
   const tlPanel2 = document.getElementById("timeline-panel");
   if (tlPanel2) tlPanel2.style.display = "none";
+  const compareEl3 = document.getElementById("compare-view");
+  if (compareEl3) compareEl3.style.display = "none";
 
   // 动态创建或复用面板
   let ecoPanel = document.getElementById("eco-panel");
@@ -1261,7 +1269,12 @@ function renderStats() {
     const hour = parseInt(dateStr.substring(6, 8), 10);
     const min = parseInt(dateStr.substring(9, 11), 10);
     if (isNaN(month) || isNaN(day)) return null;
-    return new Date(now.getFullYear(), month - 1, day, hour || 0, min || 0);
+    let parsed = new Date(now.getFullYear(), month - 1, day, hour || 0, min || 0);
+    // 如果解析出的日期在未来，说明跨了年界，回退一年
+    if (parsed > now) {
+      parsed.setFullYear(parsed.getFullYear() - 1);
+    }
+    return parsed;
   }
 
   // 按项目分组统计本周 vs 上周
@@ -1402,16 +1415,21 @@ function generateCSV(rows) {
 
 // === 会话加载 ===
 let dataReady = false;
+let loadRequestId = 0;
 
 async function loadSessions() {
   // 后台扫描未完成时跳过，避免锁竞争导致卡死
   if (!dataReady) return;
+  const thisRequest = ++loadRequestId;
   try {
+    let result;
     if (currentQuery.trim()) {
-      sessions = await invoke("search", { query: currentQuery, providerFilter });
+      result = await invoke("search", { query: currentQuery, providerFilter });
     } else {
-      sessions = await invoke("list_sessions", { providerFilter });
+      result = await invoke("list_sessions", { providerFilter });
     }
+    if (thisRequest !== loadRequestId) return; // 过期请求，丢弃
+    sessions = result;
     selectedIndex = 0;
     render();
     fetchGitInfoForVisible();
@@ -1513,7 +1531,11 @@ function getTimeGroup(dateStr) {
   const day = parseInt(dateStr.substring(3, 5), 10);
   if (isNaN(month) || isNaN(day)) return t.earlier;
 
-  const sessionDate = new Date(now.getFullYear(), month - 1, day);
+  let sessionDate = new Date(now.getFullYear(), month - 1, day);
+  // 如果解析出的日期在未来，说明跨了年界，回退一年
+  if (sessionDate > now) {
+    sessionDate.setFullYear(sessionDate.getFullYear() - 1);
+  }
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const diffDays = Math.floor((today - sessionDate) / (1000 * 60 * 60 * 24));
 
@@ -2001,6 +2023,8 @@ async function openTimeline(session) {
   if (ecoPanel) ecoPanel.style.display = "none";
   const nsPanel = document.getElementById("new-session-panel");
   if (nsPanel) nsPanel.style.display = "none";
+  const compareEl4 = document.getElementById("compare-view");
+  if (compareEl4) compareEl4.style.display = "none";
 
   let panel = document.getElementById("timeline-panel");
   if (!panel) {
@@ -2185,7 +2209,7 @@ document.addEventListener("keydown", async (e) => {
     if (e.key === "ArrowDown" && cmdSelectedIndex < filtered.length - 1) cmdSelectedIndex++;
     if (e.key === "ArrowUp" && cmdSelectedIndex > 0) cmdSelectedIndex--;
     renderCommandPalette(q);
-  } else if (e.key === "ArrowDown" && !inSearchBox) {
+  } else if (e.key === "ArrowDown") {
     e.preventDefault();
     if (selectedIndex < sessions.length - 1) {
       selectedIndex++;
@@ -2193,7 +2217,7 @@ document.addEventListener("keydown", async (e) => {
       render();
       scrollToSelected();
     }
-  } else if (e.key === "ArrowUp" && !inSearchBox) {
+  } else if (e.key === "ArrowUp") {
     e.preventDefault();
     if (selectedIndex > 0) {
       selectedIndex--;
@@ -2217,6 +2241,8 @@ document.addEventListener("keydown", async (e) => {
       }
     }
   } else if (e.key === "c" && e.ctrlKey) {
+    // 有文本选中或焦点在输入框时，不拦截系统复制行为
+    if (window.getSelection().toString() || e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
     e.preventDefault();
     const list = applyFavoriteSort(filteredSessions());
     if (list[selectedIndex]) {
@@ -2356,6 +2382,7 @@ function estimateCost(provider, tokens) {
 }
 
 /// 操作反馈提示
+let toastTimer = null;
 function showToast(message) {
   let toast = document.getElementById("toast");
   if (!toast) {
@@ -2365,8 +2392,9 @@ function showToast(message) {
     document.getElementById("app").appendChild(toast);
   }
   toast.textContent = message;
+  clearTimeout(toastTimer);
   toast.classList.add("show");
-  setTimeout(() => toast.classList.remove("show"), 2000);
+  toastTimer = setTimeout(() => toast.classList.remove("show"), 2000);
 }
 
 // ======================== Feature 2: 动态 Status Bar ========================
@@ -2429,10 +2457,21 @@ function openCompareView(session) {
   }
 
   compareOpen = true;
+  settingsOpen = false;
+  statsOpen = false;
+  ecoOpen = false;
+  newSessionOpen = false;
+  timelineOpen = false;
   sessionList.style.display = "none";
   previewPanel.style.display = "none";
   settingsPanel.style.display = "none";
   statsPanel.style.display = "none";
+  const ecoPanelC = document.getElementById("eco-panel");
+  if (ecoPanelC) ecoPanelC.style.display = "none";
+  const nsPanelC = document.getElementById("new-session-panel");
+  if (nsPanelC) nsPanelC.style.display = "none";
+  const tlPanelC = document.getElementById("timeline-panel");
+  if (tlPanelC) tlPanelC.style.display = "none";
 
   // 创建/复用对比容器
   let compareEl = document.getElementById("compare-view");

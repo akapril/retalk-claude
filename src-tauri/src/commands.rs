@@ -39,6 +39,8 @@ pub struct AppState {
     pub notes: Arc<Mutex<HashMap<String, String>>>,
     /// 后台扫描是否完成
     pub ready: Arc<std::sync::atomic::AtomicBool>,
+    /// 后台刷新是否正在进行（防止并发刷新线程）
+    pub refreshing: Arc<std::sync::atomic::AtomicBool>,
 }
 
 /// 自动探测默认工作目录：扫描常见路径，返回第一个存在且非空的目录
@@ -90,13 +92,15 @@ pub async fn pick_file(app: tauri::AppHandle, title: String) -> Option<String> {
 
         #[cfg(windows)]
         {
+            // PowerShell 单引号转义：' -> ''
+            let safe_title = title.replace("'", "''");
             let script = r#"
                 Add-Type -AssemblyName System.Windows.Forms
                 $f = New-Object System.Windows.Forms.OpenFileDialog
                 $f.Title = 'TITLE'
                 $f.Filter = '可执行文件|*.exe;*.cmd;*.bat;*.com|所有文件|*.*'
                 if ($f.ShowDialog() -eq 'OK') { $f.FileName }
-            "#.replace("TITLE", &title);
+            "#.replace("TITLE", &safe_title);
             let output = StdCommand::new("powershell")
                 .args(["-NoProfile", "-Command", &script])
                 .output()
@@ -178,15 +182,18 @@ pub fn list_sessions(
     // 按需刷新：尝试获取锁，获取不到说明后台正在同步，跳过
     if let Some(index) = state.index.try_lock() {
         let refreshed = state.updater.on_demand_refresh(&index, &config);
-        if refreshed {
+        if refreshed && !state.refreshing.load(std::sync::atomic::Ordering::Relaxed) {
             // 检测到变化，后台线程刷新（先释放锁再 spawn）
+            state.refreshing.store(true, std::sync::atomic::Ordering::Relaxed);
             drop(index);
             let bg_index = Arc::clone(&state.index);
             let bg_sessions = Arc::clone(&state.sessions);
+            let bg_refreshing = Arc::clone(&state.refreshing);
             std::thread::spawn(move || {
                 let fresh = crate::scanner::scan_all_sessions();
                 let _ = bg_index.lock().rebuild(&fresh);
                 *bg_sessions.lock() = fresh;
+                bg_refreshing.store(false, std::sync::atomic::Ordering::Relaxed);
             });
         } else {
             drop(index);
@@ -799,17 +806,20 @@ pub fn batch_export_markdown(
 
 #[tauri::command]
 pub fn auto_tag_sessions(state: State<AppState>) -> u32 {
-    let sessions = state.sessions.lock();
+    // 先克隆会话数据，立即释放 sessions 锁，避免双锁死锁
+    let sessions_data: Vec<(String, String)> = {
+        let sessions = state.sessions.lock();
+        sessions.iter().map(|s| (s.session_id.clone(), s.first_prompt.to_lowercase())).collect()
+    };
     let mut tags = state.tags.lock();
     let mut count = 0;
 
-    for session in sessions.iter() {
+    for (session_id, text) in sessions_data.iter() {
         // 已有标签的跳过
-        if tags.contains_key(&session.session_id) {
+        if tags.contains_key(session_id) {
             continue;
         }
 
-        let text = session.first_prompt.to_lowercase();
         let mut auto_tags = Vec::new();
 
         if text.contains("bug")
@@ -851,7 +861,7 @@ pub fn auto_tag_sessions(state: State<AppState>) -> u32 {
         }
 
         if !auto_tags.is_empty() {
-            tags.insert(session.session_id.clone(), auto_tags);
+            tags.insert(session_id.clone(), auto_tags);
             count += 1;
         }
     }
@@ -1274,9 +1284,15 @@ pub fn generate_cost_report(state: State<AppState>) -> Vec<CostReportRow> {
         .collect()
 }
 
-/// 写入文本文件（用于 CSV 导出等）
+/// 写入文本文件（用于 CSV 导出等，限制只能写入用户目录）
 #[tauri::command]
 pub fn write_text_file(path: String, content: String) -> Result<(), String> {
+    // 安全限制：只允许写入用户目录下的文件
+    let home = dirs::home_dir().ok_or("无法获取用户目录")?;
+    let target = std::path::Path::new(&path);
+    if !target.starts_with(&home) {
+        return Err("只能写入用户目录下的文件".to_string());
+    }
     std::fs::write(&path, content).map_err(|e| format!("写入失败: {}", e))
 }
 

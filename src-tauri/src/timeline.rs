@@ -15,13 +15,18 @@ pub struct TimelineMessage {
 
 /// 读取会话的完整时间线（根据 provider 分发到对应解析器）
 pub fn read_timeline(provider: &str, session_id: &str) -> Vec<TimelineMessage> {
-    match provider {
+    let mut messages = match provider {
         "claude" => read_claude_timeline(session_id),
         "codex" => read_codex_timeline(session_id),
         "gemini" => read_gemini_timeline(session_id),
         "opencode" | "kilo" => read_sqlite_timeline(provider, session_id),
         _ => Vec::new(),
+    };
+    // 限制最大消息数，防止超大 IPC 响应
+    if messages.len() > 500 {
+        messages.truncate(500);
     }
+    messages
 }
 
 // ============================================================
