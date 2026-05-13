@@ -257,10 +257,15 @@ pub fn new_session(
     project_path: String,
     provider: String,
 ) -> Result<(), String> {
+    // 目录不存在则创建
+    let path = std::path::Path::new(&project_path);
+    if !path.exists() {
+        std::fs::create_dir_all(path).map_err(|e| format!("创建目录失败: {}", e))?;
+    }
+
     let config = state.config.lock();
     let term = terminal::detect_terminal_with_custom(&config.terminal.preferred, &config.terminal.custom_command);
 
-    // 构建 cd + tool 命令（无 --resume）
     let cd_cmd = if cfg!(windows) {
         format!("cd /d \"{}\"", project_path)
     } else {
