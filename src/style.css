@@ -1302,14 +1302,31 @@ select.eco-add-input { cursor: pointer; }
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
 }
 
-:root[data-theme="light"] .preview-panel {
-  background: rgba(0, 0, 0, 0.03);
-}
-
-:root[data-theme="light"] .session-item {
-  border-bottom-color: rgba(0, 0, 0, 0.05);
-}
-
 :root[data-theme="light"] .toast {
   background: rgba(37, 99, 235, 0.95);
 }
+
+:root[data-theme="light"] .eco-plugin-card { background: rgba(0,0,0,0.02); border-color: rgba(0,0,0,0.08); }
+:root[data-theme="light"] .eco-toggle.off { background: rgba(0,0,0,0.1); }
+:root[data-theme="light"] .eco-add-input { background: rgba(0,0,0,0.03); color: #1a1a1a; }
+:root[data-theme="light"] .eco-add-trigger { border-color: rgba(0,0,0,0.15); color: #666; }
+:root[data-theme="light"] .eco-sub-tab.active { background: rgba(0,0,0,0.08); }
+:root[data-theme="light"] .eco-ov-card { background: rgba(0,0,0,0.02); border-color: rgba(0,0,0,0.08); }
+:root[data-theme="light"] .eco-ov-version { background: rgba(0,0,0,0.05); }
+:root[data-theme="light"] .note-input { background: rgba(0,0,0,0.03); color: #1a1a1a; border-color: var(--text-highlight); }
+:root[data-theme="light"] .tag-input { background: rgba(0,0,0,0.03); color: #1a1a1a; }
+:root[data-theme="light"] .preview-panel { background: rgba(0,0,0,0.02); }
+:root[data-theme="light"] .preview-msg { border-color: rgba(0,0,0,0.06); }
+:root[data-theme="light"] .cmd-item:hover { background: rgba(0,0,0,0.04); }
+:root[data-theme="light"] .settings-input { background: rgba(0,0,0,0.03); color: #1a1a1a; border-color: rgba(0,0,0,0.12); }
+:root[data-theme="light"] .settings-btn { background: rgba(0,0,0,0.04); color: #1a1a1a; }
+:root[data-theme="light"] .settings-btn-primary { background: var(--text-highlight); color: #fff; }
+:root[data-theme="light"] .tl-msg-user { background: rgba(37,99,235,0.08); }
+:root[data-theme="light"] .tl-msg-assistant { background: rgba(0,0,0,0.03); }
+:root[data-theme="light"] .tl-msg-tool { background: rgba(34,197,94,0.06); }
+:root[data-theme="light"] .multi-bar { background: rgba(0,0,0,0.03); border-color: rgba(0,0,0,0.1); }
+:root[data-theme="light"] .ns-tool-item { background: rgba(0,0,0,0.03); border-color: rgba(0,0,0,0.1); color: #666; }
+:root[data-theme="light"] .ns-path-input { background: rgba(0,0,0,0.03); color: #1a1a1a; }
+:root[data-theme="light"] .ns-project-item:hover { background: rgba(0,0,0,0.04); }
+:root[data-theme="light"] .session-list::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); }
+:root[data-theme="light"] .session-item { border-bottom-color: rgba(0,0,0,0.04); }

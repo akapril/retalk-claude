@@ -1448,11 +1448,7 @@ function sortSessions(list) {
 
 /// 按当前 provider 过滤
 function filteredSessions() {
-  let list = sessions;
-  if (providerFilter !== "all") {
-    list = list.filter((s) => s.provider === providerFilter);
-  }
-  return list;
+  return sessions; // 后端已按 provider 过滤
 }
 
 /// Feature 3: 将收藏的会话排到前面
@@ -1473,6 +1469,7 @@ function applyFavoriteSort(list) {
 function render() {
   sessionList.innerHTML = "";
   const list = applyFavoriteSort(filteredSessions());
+  if (selectedIndex >= list.length) selectedIndex = Math.max(0, list.length - 1);
   if (list.length === 0) {
     // Feature 1: 空状态引导 — 区分不同原因
     const hasProviders = providerStatus.some((p) => p.available);
@@ -2329,9 +2326,8 @@ async function copyCommand(session) {
 // ======================== 工具函数 ========================
 
 function escapeHtml(str) {
-  const div = document.createElement("div");
-  div.textContent = str || "";
-  return div.innerHTML;
+  if (!str) return "";
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 function truncate(str, max) {

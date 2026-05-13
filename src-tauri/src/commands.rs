@@ -84,7 +84,7 @@ pub fn detect_default_workspace() -> Option<String> {
 
 /// 打开文件选择对话框（异步，不阻塞 UI）
 #[tauri::command]
-pub async fn pick_file(app: tauri::AppHandle, title: String) -> Option<String> {
+pub async fn pick_file(title: String) -> Option<String> {
     use tauri::async_runtime;
 
     async_runtime::spawn_blocking(move || {
@@ -483,26 +483,7 @@ pub fn export_session_markdown(
     state: State<AppState>,
     session_id: String,
 ) -> Result<String, String> {
-    let sessions = state.sessions.lock();
-    let session = sessions
-        .iter()
-        .find(|s| s.session_id == session_id)
-        .ok_or("会话未找到")?;
-
-    let mut md = format!("# {} - {}\n\n", session.project_name, session.provider);
-    md += &format!("**项目路径:** {}\n", session.project_path);
-    md += &format!("**会话ID:** {}\n", session.session_id);
-    md += &format!("**消息数:** {}\n", session.message_count);
-    if session.total_tokens > 0 {
-        md += &format!("**Token 数:** {}\n", session.total_tokens);
-    }
-    md += "\n---\n\n";
-
-    for (i, msg) in session.user_messages.iter().enumerate() {
-        md += &format!("### 消息 {}\n\n{}\n\n", i + 1, msg);
-    }
-
-    Ok(md)
+    export_session_markdown_inner(&state, &session_id)
 }
 
 #[tauri::command]

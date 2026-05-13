@@ -14,6 +14,17 @@ pub struct SessionIndex {
     schema: Schema,
     #[allow(dead_code)]
     jieba: Arc<Jieba>,
+    // 缓存字段句柄，避免每次 add_session_to_writer 都查找
+    f_session_id: Field,
+    f_provider: Field,
+    f_project_path: Field,
+    f_project_name: Field,
+    f_first_prompt: Field,
+    f_last_prompt: Field,
+    f_content: Field,
+    f_updated_at: Field,
+    f_message_count: Field,
+    f_total_tokens: Field,
 }
 
 /// jieba 分词器适配 tantivy Tokenizer trait
@@ -151,7 +162,24 @@ impl SessionIndex {
             .reload_policy(ReloadPolicy::OnCommitWithDelay)
             .try_into()?;
 
-        Ok(Self { index, reader, schema, jieba })
+        // 缓存字段句柄
+        let f_session_id = schema.get_field("session_id").unwrap();
+        let f_provider = schema.get_field("provider").unwrap();
+        let f_project_path = schema.get_field("project_path").unwrap();
+        let f_project_name = schema.get_field("project_name").unwrap();
+        let f_first_prompt = schema.get_field("first_prompt").unwrap();
+        let f_last_prompt = schema.get_field("last_prompt").unwrap();
+        let f_content = schema.get_field("content").unwrap();
+        let f_updated_at = schema.get_field("updated_at").unwrap();
+        let f_message_count = schema.get_field("message_count").unwrap();
+        let f_total_tokens = schema.get_field("total_tokens").unwrap();
+
+        Ok(Self {
+            index, reader, schema, jieba,
+            f_session_id, f_provider, f_project_path, f_project_name,
+            f_first_prompt, f_last_prompt, f_content, f_updated_at,
+            f_message_count, f_total_tokens,
+        })
     }
 
     /// 全量重建索引：清空后批量写入
@@ -169,8 +197,7 @@ impl SessionIndex {
     /// 单条会话更新：先删除旧文档再写入新文档
     pub fn upsert_session(&self, session: &Session) -> Result<(), Box<dyn std::error::Error>> {
         let mut writer: IndexWriter = self.index.writer(50_000_000)?;
-        let session_id_field = self.schema.get_field("session_id").unwrap();
-        let term = tantivy::Term::from_field_text(session_id_field, &session.session_id);
+        let term = tantivy::Term::from_field_text(self.f_session_id, &session.session_id);
         writer.delete_term(term);
         self.add_session_to_writer(&mut writer, session)?;
         writer.commit()?;
@@ -184,33 +211,22 @@ impl SessionIndex {
         writer: &mut IndexWriter,
         session: &Session,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let session_id = self.schema.get_field("session_id").unwrap();
-        let provider = self.schema.get_field("provider").unwrap();
-        let project_path = self.schema.get_field("project_path").unwrap();
-        let project_name = self.schema.get_field("project_name").unwrap();
-        let first_prompt = self.schema.get_field("first_prompt").unwrap();
-        let last_prompt = self.schema.get_field("last_prompt").unwrap();
-        let content = self.schema.get_field("content").unwrap();
-        let updated_at = self.schema.get_field("updated_at").unwrap();
-        let message_count = self.schema.get_field("message_count").unwrap();
-        let total_tokens = self.schema.get_field("total_tokens").unwrap();
-
         // 合并所有用户消息作为全文检索内容
         let all_content = session.user_messages.join("\n");
         let date_val =
             tantivy::DateTime::from_timestamp_micros(session.updated_at.timestamp_micros());
 
         writer.add_document(doc!(
-            session_id => session.session_id.as_str(),
-            provider => session.provider.as_str(),
-            project_path => session.project_path.as_str(),
-            project_name => session.project_name.as_str(),
-            first_prompt => session.first_prompt.as_str(),
-            last_prompt => session.last_prompt.as_str(),
-            content => all_content.as_str(),
-            updated_at => date_val,
-            message_count => session.message_count as u64,
-            total_tokens => session.total_tokens,
+            self.f_session_id => session.session_id.as_str(),
+            self.f_provider => session.provider.as_str(),
+            self.f_project_path => session.project_path.as_str(),
+            self.f_project_name => session.project_name.as_str(),
+            self.f_first_prompt => session.first_prompt.as_str(),
+            self.f_last_prompt => session.last_prompt.as_str(),
+            self.f_content => all_content.as_str(),
+            self.f_updated_at => date_val,
+            self.f_message_count => session.message_count as u64,
+            self.f_total_tokens => session.total_tokens,
         ))?;
 
         Ok(())
@@ -228,8 +244,8 @@ impl SessionIndex {
         use tantivy::TantivyDocument;
 
         let searcher = self.reader.searcher();
-        let session_id_field = self.schema.get_field("session_id").unwrap();
-        let updated_at_field = self.schema.get_field("updated_at").unwrap();
+        let session_id_field = self.f_session_id;
+        let updated_at_field = self.f_updated_at;
 
         // 收集索引中所有 session_id -> updated_at
         let mut indexed: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
