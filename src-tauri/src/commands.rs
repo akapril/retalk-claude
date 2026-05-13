@@ -4,6 +4,7 @@ use crate::models::{AppConfig, GitInfo, ProviderInfo, Session, TagsMap, UpdateSt
 use crate::searcher::{self, SearchResult};
 use crate::terminal;
 use crate::updater::Updater;
+use chrono;
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::process::Command;
@@ -24,6 +25,16 @@ fn silent_command(program: &str) -> Command {
     Command::new(program)
 }
 
+/// 项目笔记条目
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ProjectNote {
+    pub text: String,
+    pub timestamp: String,
+}
+
+/// 项目笔记存储类型：project_path -> Vec<ProjectNote>
+pub type ProjectNotesMap = HashMap<String, Vec<ProjectNote>>;
+
 /// 应用全局状态
 pub struct AppState {
     pub index: Arc<Mutex<SessionIndex>>,
@@ -37,6 +48,12 @@ pub struct AppState {
     pub tags: Arc<Mutex<TagsMap>>,
     /// 会话备注：session_id -> "备注文本"
     pub notes: Arc<Mutex<HashMap<String, String>>>,
+    /// 固定项目路径列表
+    pub pinned_projects: Arc<Mutex<Vec<String>>>,
+    /// 项目笔记：project_path -> Vec<ProjectNote>
+    pub project_notes: Arc<Mutex<ProjectNotesMap>>,
+    /// 隐藏的会话 ID 列表
+    pub hidden_sessions: Arc<Mutex<Vec<String>>>,
     /// 后台扫描是否完成
     pub ready: Arc<std::sync::atomic::AtomicBool>,
     /// 后台刷新是否正在进行（防止并发刷新线程）
@@ -149,7 +166,7 @@ pub fn is_ready(state: State<AppState>) -> bool {
     state.ready.load(std::sync::atomic::Ordering::Relaxed)
 }
 
-/// 全文搜索会话，支持按 provider 过滤
+/// 全文搜索会话，支持按 provider 过滤，自动排除隐藏会话
 #[tauri::command]
 pub fn search(
     state: State<AppState>,
@@ -158,9 +175,15 @@ pub fn search(
 ) -> Vec<SearchResult> {
     let max = state.config.lock().ui.max_results;
     let filter = provider_filter.as_deref().filter(|p| *p != "all");
-    match state.index.try_lock() {
+    let hidden = state.hidden_sessions.lock();
+    let results = match state.index.try_lock() {
         Some(index) => searcher::search(&index, &query, max, filter),
         None => Vec::new(),
+    };
+    if hidden.is_empty() {
+        results
+    } else {
+        results.into_iter().filter(|r| !hidden.contains(&r.session_id)).collect()
     }
 }
 
@@ -202,9 +225,15 @@ pub fn list_sessions(
 
     // 用 try_lock 获取索引查询，获取不到则返回空（后台正在更新）
     let filter = provider_filter.as_deref().filter(|p| *p != "all");
-    match state.index.try_lock() {
+    let hidden = state.hidden_sessions.lock();
+    let results = match state.index.try_lock() {
         Some(index) => searcher::list_all(&index, config.ui.max_results, filter),
         None => Vec::new(), // 后台正在更新，前端稍后重试
+    };
+    if hidden.is_empty() {
+        results
+    } else {
+        results.into_iter().filter(|r| !hidden.contains(&r.session_id)).collect()
     }
 }
 
@@ -1327,4 +1356,196 @@ fn get_autostart_impl() -> bool {
     dirs::config_dir()
         .map(|c| c.join("autostart/retalk.desktop").exists())
         .unwrap_or(false)
+}
+
+// ============================================================
+// Feature: 项目固定 — 将常用项目固定到分组视图顶部
+// ============================================================
+
+fn pinned_projects_path() -> std::path::PathBuf {
+    config::retalk_dir().join("pinned_projects.json")
+}
+
+/// 从磁盘加载固定项目列表
+pub fn load_pinned_projects() -> Vec<String> {
+    let path = pinned_projects_path();
+    if path.exists() {
+        std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|c| serde_json::from_str(&c).ok())
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    }
+}
+
+fn save_pinned_projects(pinned: &[String]) {
+    let path = pinned_projects_path();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(&path, serde_json::to_string_pretty(pinned).unwrap_or_default());
+}
+
+#[tauri::command]
+pub fn toggle_pin_project(
+    state: State<AppState>,
+    project_path: String,
+) -> bool {
+    let mut pinned = state.pinned_projects.lock();
+    let is_pinned = if let Some(pos) = pinned.iter().position(|p| p == &project_path) {
+        pinned.remove(pos);
+        false
+    } else {
+        pinned.push(project_path);
+        true
+    };
+    save_pinned_projects(&pinned);
+    is_pinned
+}
+
+#[tauri::command]
+pub fn get_pinned_projects(state: State<AppState>) -> Vec<String> {
+    state.pinned_projects.lock().clone()
+}
+
+// ============================================================
+// Feature: 项目笔记 — 按项目路径存储笔记
+// ============================================================
+
+fn project_notes_path() -> std::path::PathBuf {
+    config::retalk_dir().join("project_notes.json")
+}
+
+/// 从磁盘加载项目笔记
+pub fn load_project_notes() -> ProjectNotesMap {
+    let path = project_notes_path();
+    if path.exists() {
+        std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|c| serde_json::from_str(&c).ok())
+            .unwrap_or_default()
+    } else {
+        HashMap::new()
+    }
+}
+
+fn save_project_notes(notes: &ProjectNotesMap) {
+    let path = project_notes_path();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(&path, serde_json::to_string_pretty(notes).unwrap_or_default());
+}
+
+#[tauri::command]
+pub fn add_project_note(
+    state: State<AppState>,
+    project_path: String,
+    text: String,
+) {
+    let mut notes = state.project_notes.lock();
+    let entry = notes.entry(project_path).or_default();
+    entry.push(ProjectNote {
+        text,
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    });
+    save_project_notes(&notes);
+}
+
+#[tauri::command]
+pub fn get_project_notes(
+    state: State<AppState>,
+    project_path: String,
+) -> Vec<ProjectNote> {
+    let notes = state.project_notes.lock();
+    notes.get(&project_path).cloned().unwrap_or_default()
+}
+
+#[tauri::command]
+pub fn delete_project_note(
+    state: State<AppState>,
+    project_path: String,
+    index: usize,
+) {
+    let mut notes = state.project_notes.lock();
+    if let Some(entries) = notes.get_mut(&project_path) {
+        if index < entries.len() {
+            entries.remove(index);
+            if entries.is_empty() {
+                notes.remove(&project_path);
+            }
+        }
+    }
+    save_project_notes(&notes);
+}
+
+// ============================================================
+// Feature: 会话隐藏 — 从索引中隐藏不需要的会话
+// ============================================================
+
+fn hidden_path() -> std::path::PathBuf {
+    config::retalk_dir().join("hidden.json")
+}
+
+/// 从磁盘加载隐藏会话列表
+pub fn load_hidden_sessions() -> Vec<String> {
+    let path = hidden_path();
+    if path.exists() {
+        std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|c| serde_json::from_str(&c).ok())
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    }
+}
+
+fn save_hidden_sessions(hidden: &[String]) {
+    let path = hidden_path();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(&path, serde_json::to_string_pretty(hidden).unwrap_or_default());
+}
+
+#[tauri::command]
+pub fn toggle_hide_session(
+    state: State<AppState>,
+    session_id: String,
+) -> bool {
+    let mut hidden = state.hidden_sessions.lock();
+    let is_hidden = if let Some(pos) = hidden.iter().position(|id| id == &session_id) {
+        hidden.remove(pos);
+        false
+    } else {
+        hidden.push(session_id);
+        true
+    };
+    save_hidden_sessions(&hidden);
+    is_hidden
+}
+
+#[tauri::command]
+pub fn get_hidden_sessions(state: State<AppState>) -> Vec<String> {
+    state.hidden_sessions.lock().clone()
+}
+
+/// 列出所有会话（包括隐藏的），用于 show-hidden 命令
+#[tauri::command]
+pub fn list_all_sessions_unfiltered(
+    state: State<AppState>,
+    provider_filter: Option<String>,
+) -> Vec<SearchResult> {
+    if !state.ready.load(std::sync::atomic::Ordering::Relaxed) {
+        let index = state.index.lock();
+        let filter = provider_filter.as_deref().filter(|p| *p != "all");
+        return searcher::list_all(&index, 0, filter);
+    }
+    let config = state.config.lock().clone();
+    let filter = provider_filter.as_deref().filter(|p| *p != "all");
+    match state.index.try_lock() {
+        Some(index) => searcher::list_all(&index, config.ui.max_results, filter),
+        None => Vec::new(),
+    }
 }

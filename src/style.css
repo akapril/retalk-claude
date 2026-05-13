@@ -1330,3 +1330,26 @@ select.eco-add-input { cursor: pointer; }
 :root[data-theme="light"] .ns-project-item:hover { background: rgba(0,0,0,0.04); }
 :root[data-theme="light"] .session-list::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); }
 :root[data-theme="light"] .session-item { border-bottom-color: rgba(0,0,0,0.04); }
+
+/* === 项目固定图标 === */
+.pin-btn {
+  cursor: pointer;
+  font-size: 12px;
+  opacity: 0.4;
+  transition: opacity 0.15s;
+  user-select: none;
+}
+.pin-btn:hover { opacity: 0.8; }
+.pin-btn.pinned { opacity: 1; }
+
+/* === 隐藏会话样式 === */
+.session-hidden .header .project-name,
+.session-hidden .prompt {
+  text-decoration: line-through;
+  opacity: 0.5;
+}
+
+/* === 项目笔记面板 === */
+.project-notes-panel { padding: 4px 0; }
+.note-input-row { display: flex; padding: 8px 12px; gap: 4px; }
+.notes-list { max-height: calc(100vh - 200px); overflow-y: auto; }

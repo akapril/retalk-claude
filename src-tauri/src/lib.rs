@@ -90,10 +90,13 @@ pub fn run() {
     let index = Arc::new(Mutex::new(index));
     let updater_instance = Arc::new(updater::Updater::new());
 
-    // 加载收藏和标签
+    // 加载收藏、标签和新功能数据
     let favorites = commands::load_favorites();
     let tags = commands::load_tags();
     let notes = commands::load_notes();
+    let pinned_projects = commands::load_pinned_projects();
+    let project_notes = commands::load_project_notes();
+    let hidden_sessions = commands::load_hidden_sessions();
 
     // 如果有已有索引数据，立即标记就绪 + 初始化 mtime（防止 on_demand_refresh 触发全量扫描）
     let ready = Arc::new(std::sync::atomic::AtomicBool::new(has_existing_data));
@@ -110,6 +113,9 @@ pub fn run() {
         favorites: Arc::new(Mutex::new(favorites)),
         tags: Arc::new(Mutex::new(tags)),
         notes: Arc::new(Mutex::new(notes)),
+        pinned_projects: Arc::new(Mutex::new(pinned_projects)),
+        project_notes: Arc::new(Mutex::new(project_notes)),
+        hidden_sessions: Arc::new(Mutex::new(hidden_sessions)),
         ready: Arc::clone(&ready),
         refreshing: Arc::new(std::sync::atomic::AtomicBool::new(false)),
     };
@@ -296,6 +302,14 @@ pub fn run() {
             commands::get_session_timeline,
             commands::generate_cost_report,
             commands::write_text_file,
+            commands::toggle_pin_project,
+            commands::get_pinned_projects,
+            commands::add_project_note,
+            commands::get_project_notes,
+            commands::delete_project_note,
+            commands::toggle_hide_session,
+            commands::get_hidden_sessions,
+            commands::list_all_sessions_unfiltered,
         ])
         .run(tauri::generate_context!())
         .expect("启动 retalk 失败");

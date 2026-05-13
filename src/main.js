@@ -32,6 +32,10 @@ const i18n = {
     scanned: "已扫描完成，暂无会话记录", noMatchResults: "没有找到匹配的会话",
     copiedPath: "已复制项目路径", copiedCmd: "已复制恢复命令", copiedMd: "已复制 Markdown 到剪贴板",
     viewTimeline: "查看对话", commandEmpty: "没有匹配的命令",
+    recentSearches: "最近搜索", clearHistory: "清除历史",
+    pinProject: "固定项目", unpinProject: "取消固定",
+    projectNotes: "项目笔记", addNote: "添加笔记", deleteNote: "删除",
+    hideSession: "隐藏会话", unhideSession: "取消隐藏", showHidden: "显示隐藏会话",
   },
   en: {
     searchPlaceholder: "Search sessions...",
@@ -61,6 +65,10 @@ const i18n = {
     scanned: "Scan complete, no sessions found", noMatchResults: "No matching sessions found",
     copiedPath: "Project path copied", copiedCmd: "Resume command copied", copiedMd: "Markdown copied to clipboard",
     viewTimeline: "View Timeline", commandEmpty: "No matching commands",
+    recentSearches: "Recent Searches", clearHistory: "Clear History",
+    pinProject: "Pin Project", unpinProject: "Unpin Project",
+    projectNotes: "Project Notes", addNote: "Add Note", deleteNote: "Delete",
+    hideSession: "Hide Session", unhideSession: "Unhide Session", showHidden: "Show Hidden Sessions",
   }
 };
 const t = i18n[LANG];
@@ -105,6 +113,12 @@ let timelineOpen = false;    // 时间线（对话回放）面板状态
 let multiSelectMode = false; // Feature 6(批量操作): 多选模式
 let multiSelected = new Set(); // Feature 6: 已选会话 ID 集合
 let providerStatus = [];   // Feature 1(空状态引导): provider 可用状态
+let pinnedProjects = [];   // 固定项目路径列表
+let hiddenSessions = [];   // 隐藏的会话 ID 列表
+let showHiddenMode = false; // 临时显示隐藏会话模式
+
+// 搜索历史（localStorage）
+let searchHistory = JSON.parse(localStorage.getItem("retalk_searchHistory") || "[]");
 
 const searchInput = document.getElementById("search-input");
 const searchClear = document.getElementById("search-clear");
@@ -242,6 +256,13 @@ async function init() {
   // 加载 provider 状态（空状态引导用）
   try {
     providerStatus = await invoke("get_provider_status");
+  } catch (_) { /* 忽略 */ }
+  // 加载固定项目和隐藏会话
+  try {
+    pinnedProjects = await invoke("get_pinned_projects");
+  } catch (_) { /* 忽略 */ }
+  try {
+    hiddenSessions = await invoke("get_hidden_sessions");
   } catch (_) { /* 忽略 */ }
 
   // 等待后台扫描完成再加载数据
@@ -1424,9 +1445,26 @@ async function loadSessions() {
   try {
     let result;
     if (currentQuery.trim()) {
-      result = await invoke("search", { query: currentQuery, providerFilter });
+      // 搜索历史：记录非命令查询
+      addSearchHistory(currentQuery);
+      if (showHiddenMode) {
+        result = await invoke("list_all_sessions_unfiltered", { providerFilter });
+        // 客户端侧搜索过滤
+        const q = currentQuery.toLowerCase();
+        result = result.filter(r =>
+          r.project_name.toLowerCase().includes(q) ||
+          r.first_prompt.toLowerCase().includes(q) ||
+          r.last_prompt.toLowerCase().includes(q)
+        );
+      } else {
+        result = await invoke("search", { query: currentQuery, providerFilter });
+      }
     } else {
-      result = await invoke("list_sessions", { providerFilter });
+      if (showHiddenMode) {
+        result = await invoke("list_all_sessions_unfiltered", { providerFilter });
+      } else {
+        result = await invoke("list_sessions", { providerFilter });
+      }
     }
     if (thisRequest !== loadRequestId) return; // 过期请求，丢弃
     sessions = result;
@@ -1436,6 +1474,44 @@ async function loadSessions() {
   } catch (e) {
     console.error("加载会话失败:", e);
   }
+}
+
+// === 搜索历史 ===
+function addSearchHistory(query) {
+  if (!query.trim() || query.startsWith(">")) return;
+  searchHistory = [query, ...searchHistory.filter(h => h !== query)].slice(0, 10);
+  localStorage.setItem("retalk_searchHistory", JSON.stringify(searchHistory));
+}
+
+function showSearchHistory() {
+  if (searchInput.value || searchHistory.length === 0) return;
+  sessionList.innerHTML = "";
+  const label = document.createElement("div");
+  label.className = "group-header";
+  label.textContent = t.recentSearches;
+  sessionList.appendChild(label);
+
+  searchHistory.forEach(q => {
+    const item = document.createElement("div");
+    item.className = "cmd-item";
+    item.innerHTML = `<span class="cmd-icon">🔍</span><span class="cmd-label">${escapeHtml(q)}</span>`;
+    item.addEventListener("click", () => {
+      searchInput.value = q;
+      currentQuery = q;
+      loadSessions();
+    });
+    sessionList.appendChild(item);
+  });
+
+  const clearBtn = document.createElement("div");
+  clearBtn.className = "cmd-item";
+  clearBtn.innerHTML = `<span class="cmd-icon">✕</span><span class="cmd-label" style="color:var(--text-dim)">${t.clearHistory}</span>`;
+  clearBtn.addEventListener("click", () => {
+    searchHistory = [];
+    localStorage.removeItem("retalk_searchHistory");
+    render();
+  });
+  sessionList.appendChild(clearBtn);
 }
 
 /// 按当前排序模式排序会话列表
@@ -1545,10 +1621,13 @@ function getTimeGroup(dateStr) {
 
 function renderGrouped(list) {
   const groups = {};
+  // 记录项目名到项目路径的映射（用于固定功能）
+  const nameToPath = {};
   list.forEach((s) => {
     const key = s.project_name || "未知项目";
     if (!groups[key]) groups[key] = [];
     groups[key].push(s);
+    nameToPath[key] = s.project_path;
   });
 
   let sortedEntries = Object.entries(groups);
@@ -1562,6 +1641,16 @@ function renderGrouped(list) {
     });
   }
 
+  // 固定项目排到最前面
+  const pinnedSet = new Set(pinnedProjects);
+  sortedEntries.sort(([a], [b]) => {
+    const aPinned = pinnedSet.has(nameToPath[a]);
+    const bPinned = pinnedSet.has(nameToPath[b]);
+    if (aPinned && !bPinned) return -1;
+    if (!aPinned && bPinned) return 1;
+    return 0;
+  });
+
   const favSet = new Set(favorites);
   let globalIdx = 0;
   sortedEntries.forEach(([name, items]) => {
@@ -1569,10 +1658,32 @@ function renderGrouped(list) {
     const favInGroup = sortSessions(items.filter((s) => favSet.has(s.session_id)));
     const normalInGroup = sortSessions(items.filter((s) => !favSet.has(s.session_id)));
     const sortedItems = [...favInGroup, ...normalInGroup];
+    const projectPath = nameToPath[name];
+    const isPinned = pinnedSet.has(projectPath);
     const header = document.createElement("div");
     header.className = "group-header";
-    header.textContent = `${name} (${sortedItems.length})`;
+    header.innerHTML = `<span class="pin-btn ${isPinned ? 'pinned' : ''}" data-project-path="${escapeHtml(projectPath)}" title="${isPinned ? t.unpinProject : t.pinProject}">${isPinned ? '📌' : '📍'}</span> ${escapeHtml(name)} (${sortedItems.length})`;
     sessionList.appendChild(header);
+
+    // 固定按钮点击事件
+    const pinBtn = header.querySelector(".pin-btn");
+    if (pinBtn) {
+      pinBtn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        try {
+          const nowPinned = await invoke("toggle_pin_project", { projectPath });
+          if (nowPinned) {
+            pinnedProjects.push(projectPath);
+          } else {
+            pinnedProjects = pinnedProjects.filter(p => p !== projectPath);
+          }
+          render();
+        } catch (err) {
+          console.error("固定项目失败:", err);
+        }
+      });
+    }
+
     sortedItems.forEach((s) => {
       sessionList.appendChild(createSessionItem(s, globalIdx));
       globalIdx++;
@@ -1583,7 +1694,8 @@ function renderGrouped(list) {
 function createSessionItem(session, index) {
   const item = document.createElement("div");
   const isMultiSel = multiSelected.has(session.session_id);
-  item.className = "session-item" + (index === selectedIndex ? " selected" : "") + (isMultiSel ? " multi-selected" : "");
+  const isHidden = hiddenSessions.includes(session.session_id);
+  item.className = "session-item" + (index === selectedIndex ? " selected" : "") + (isMultiSel ? " multi-selected" : "") + (isHidden ? " session-hidden" : "");
   item.dataset.index = index;
   item.dataset.sessionId = session.session_id;
 
@@ -1848,6 +1960,13 @@ function showContextMenu(x, y, session) {
   contextMenu.style.left = `${x}px`;
   contextMenu.style.top = `${y}px`;
 
+  // 动态更新隐藏/取消隐藏文本
+  const hideItem = contextMenu.querySelector('[data-action="hide-session"]');
+  if (hideItem) {
+    const isHidden = hiddenSessions.includes(session.session_id);
+    hideItem.textContent = isHidden ? t.unhideSession : t.hideSession;
+  }
+
   // 防止溢出窗口
   const rect = contextMenu.getBoundingClientRect();
   if (rect.right > window.innerWidth) {
@@ -1941,6 +2060,24 @@ contextMenu.querySelectorAll(".ctx-item").forEach((item) => {
       case "compare":
         openCompareView(s);
         break;
+      case "project-notes":
+        openProjectNotesPanel(s.project_path, s.project_name);
+        break;
+      case "hide-session":
+        try {
+          const nowHidden = await invoke("toggle_hide_session", { sessionId: s.session_id });
+          if (nowHidden) {
+            hiddenSessions.push(s.session_id);
+            showToast(t.hideSession);
+          } else {
+            hiddenSessions = hiddenSessions.filter(id => id !== s.session_id);
+            showToast(t.unhideSession);
+          }
+          await loadSessions();
+        } catch (e) {
+          console.error("隐藏会话失败:", e);
+        }
+        break;
     }
   });
 });
@@ -1951,6 +2088,123 @@ document.addEventListener("click", (e) => {
     hideContextMenu();
   }
 });
+
+// ======================== 项目笔记面板 ========================
+
+async function openProjectNotesPanel(projectPath, projectName) {
+  // 获取笔记列表
+  let notes = [];
+  try {
+    notes = await invoke("get_project_notes", { projectPath });
+  } catch (_) {}
+
+  // 复用 sessionList 区域显示笔记面板
+  sessionList.innerHTML = "";
+  previewPanel.style.display = "none";
+
+  const container = document.createElement("div");
+  container.className = "project-notes-panel";
+
+  // 标题
+  const header = document.createElement("div");
+  header.className = "group-header";
+  header.innerHTML = `${t.projectNotes} — ${escapeHtml(projectName)}`;
+  container.appendChild(header);
+
+  // 输入框
+  const inputRow = document.createElement("div");
+  inputRow.className = "note-input-row";
+  const input = document.createElement("input");
+  input.className = "note-input";
+  input.placeholder = t.addNote + "...";
+  input.style.cssText = "flex:1";
+  const addBtn = document.createElement("button");
+  addBtn.className = "settings-btn-primary";
+  addBtn.textContent = t.addNote;
+  addBtn.style.cssText = "margin-left:8px;padding:4px 12px;font-size:12px";
+  inputRow.style.cssText = "display:flex;padding:8px 12px;gap:4px";
+  inputRow.appendChild(input);
+  inputRow.appendChild(addBtn);
+  container.appendChild(inputRow);
+
+  // 笔记列表
+  const notesList = document.createElement("div");
+  notesList.className = "notes-list";
+
+  function renderNotes(noteItems) {
+    notesList.innerHTML = "";
+    if (noteItems.length === 0) {
+      notesList.innerHTML = `<div class="empty-state" style="padding:16px;font-size:12px">${LANG === "zh" ? "暂无笔记" : "No notes yet"}</div>`;
+      return;
+    }
+    noteItems.forEach((note, idx) => {
+      const row = document.createElement("div");
+      row.className = "cmd-item";
+      row.style.cssText = "align-items:flex-start;padding:6px 12px";
+      const timeStr = formatRelativeTime(note.timestamp);
+      row.innerHTML = `
+        <div style="flex:1;min-width:0">
+          <div style="word-break:break-all">${escapeHtml(note.text)}</div>
+          <div style="font-size:10px;color:var(--text-dim);margin-top:2px">${escapeHtml(timeStr)}</div>
+        </div>
+        <button class="note-delete-btn" data-idx="${idx}" style="margin-left:8px;cursor:pointer;background:none;border:none;color:var(--text-dim);font-size:12px">${t.deleteNote}</button>
+      `;
+      notesList.appendChild(row);
+
+      // 删除按钮
+      row.querySelector(".note-delete-btn").addEventListener("click", async () => {
+        try {
+          await invoke("delete_project_note", { projectPath, index: idx });
+          const updated = await invoke("get_project_notes", { projectPath });
+          renderNotes(updated);
+        } catch (e) {
+          console.error("删除笔记失败:", e);
+        }
+      });
+    });
+  }
+  renderNotes(notes);
+  container.appendChild(notesList);
+
+  sessionList.appendChild(container);
+
+  // 添加笔记事件
+  const doAdd = async () => {
+    const text = input.value.trim();
+    if (!text) return;
+    try {
+      await invoke("add_project_note", { projectPath, text });
+      input.value = "";
+      const updated = await invoke("get_project_notes", { projectPath });
+      renderNotes(updated);
+    } catch (e) {
+      console.error("添加笔记失败:", e);
+    }
+  };
+  addBtn.addEventListener("click", doAdd);
+  input.addEventListener("keydown", (e) => {
+    e.stopPropagation();
+    if (e.key === "Enter") { e.preventDefault(); doAdd(); }
+    if (e.key === "Escape") { e.preventDefault(); render(); searchInput.focus(); }
+  });
+  input.focus();
+}
+
+/// 格式化相对时间
+function formatRelativeTime(isoStr) {
+  try {
+    const d = new Date(isoStr);
+    const now = new Date();
+    const diff = Math.floor((now - d) / 1000);
+    if (diff < 60) return LANG === "zh" ? "刚刚" : "just now";
+    if (diff < 3600) return LANG === "zh" ? `${Math.floor(diff/60)} 分钟前` : `${Math.floor(diff/60)}m ago`;
+    if (diff < 86400) return LANG === "zh" ? `${Math.floor(diff/3600)} 小时前` : `${Math.floor(diff/3600)}h ago`;
+    if (diff < 2592000) return LANG === "zh" ? `${Math.floor(diff/86400)} 天前` : `${Math.floor(diff/86400)}d ago`;
+    return d.toLocaleDateString();
+  } catch (_) {
+    return isoStr;
+  }
+}
 
 // ======================== Feature 6: 标签编辑 ========================
 
@@ -2114,6 +2368,7 @@ const COMMANDS = [
   { id: "filter-codex",  label: () => "Codex",              icon: "🤖", action: () => { providerFilter = "codex"; localStorage.setItem("retalk_providerFilter", "codex"); loadSessions(); } },
   { id: "filter-gemini", label: () => "Gemini",             icon: "🤖", action: () => { providerFilter = "gemini"; localStorage.setItem("retalk_providerFilter", "gemini"); loadSessions(); } },
   { id: "clear-search",  label: () => LANG === "zh" ? "清空搜索" : "Clear Search", icon: "✕", action: () => { searchInput.value = ""; currentQuery = ""; commandMode = false; searchClear.style.display = "none"; loadSessions(); } },
+  { id: "show-hidden",   label: () => t.showHidden,          icon: "👁",  action: () => { showHiddenMode = !showHiddenMode; showToast(showHiddenMode ? (LANG === "zh" ? "已显示隐藏会话" : "Showing hidden sessions") : (LANG === "zh" ? "已隐藏" : "Hidden sessions hidden")); loadSessions(); } },
 ];
 
 let cmdSelectedIndex = 0;
@@ -2190,6 +2445,13 @@ searchClear.addEventListener("click", () => {
   searchClear.style.display = "none";
   loadSessions();
   searchInput.focus();
+});
+
+// 搜索框聚焦时显示搜索历史
+searchInput.addEventListener("focus", () => {
+  if (!searchInput.value && !settingsOpen && !statsOpen && !ecoOpen && !timelineOpen && !compareOpen && !newSessionOpen) {
+    showSearchHistory();
+  }
 });
 
 // 下拉选择已通过 setupDropdown 处理
